@@ -1,0 +1,11 @@
+# Xcode / Swift build artifacts
+build/
+DerivedData/
+*.xcarchive
+
+# Xcode user state
+*.xcuserstate
+**/xcuserdata/
+
+# macOS
+.DS_Store
