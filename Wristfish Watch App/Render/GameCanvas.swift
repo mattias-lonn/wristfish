@@ -46,6 +46,12 @@ struct GameCanvas: View {
             // Fish leaping out of the water (above the surface).
             for leap in model.leaps { GameArt.drawLeap(ctx, size, leap, dur: model.leapDuration) }
 
+            // The finish line — a fixed spot that scrolls in; drawn under the boat so you cross it.
+            if let fy = model.finishLineY {
+                GameArt.drawFinishLine(ctx, size, y: fy, t: model.elapsed,
+                                       near: min(1, max(0, fy / model.boatY)))
+            }
+
             // While aiming: the line going out + the aim marker (gold when locked on a fish).
             if model.phase == .casting {
                 GameArt.drawLine(ctx, size, from: model.boatX, boatY: model.boatY,

@@ -792,6 +792,70 @@ enum GameArt {
         g.stroke(shaft, with: .color(quill), lineWidth: max(0.6, L * 0.05))
     }
 
+    // MARK: Finish line ------------------------------------------------------
+
+    /// A checkered finish banner floating across the water at `y` (normalized). It drifts down toward
+    /// the boat as the level goal nears; `near` (0…1) brightens its glow as it closes in.
+    static func drawFinishLine(_ ctx: GraphicsContext, _ s: CGSize, y: Double, t: Double, near: Double) {
+        let w = s.width, h = s.height
+        guard y > -0.04, y < 1.06 else { return }
+        let cy = y * h
+        let band = max(10.0, 0.052 * h)
+        let cols = 9
+        let cellW = w / Double(cols)
+        let rh = band / 2
+        func wob(_ c: Int) -> Double { sin(Double(c) * 0.7 + t * 2.2) * (0.012 * h) }
+
+        // Soft glow on the water, stronger as the line closes in on the boat.
+        ctx.fill(Path(CGRect(x: 0, y: cy - band, width: w, height: band * 2)),
+                 with: .linearGradient(
+                    Gradient(colors: [.clear, Sea.foam.opacity(0.10 + 0.22 * near), .clear]),
+                    startPoint: CGPoint(x: 0, y: cy - band), endPoint: CGPoint(x: 0, y: cy + band)))
+
+        // Two rows of checkered cells with a gentle wave.
+        let dark = Color(white: 0.08).opacity(0.88)
+        let light = Color.white.opacity(0.95)
+        for c in 0..<cols {
+            let x = Double(c) * cellW
+            let dy = wob(c)
+            for r in 0..<2 {
+                let on = (c + r) % 2 == 0
+                let yy = cy - band / 2 + Double(r) * rh + dy
+                ctx.fill(Path(CGRect(x: x, y: yy, width: cellW + 1, height: rh + 0.5)),
+                         with: .color(on ? light : dark))
+            }
+        }
+        // Crisp top & bottom edges following the same wave.
+        for edge in [-band / 2, band / 2] {
+            var line = Path()
+            for c in 0...cols {
+                let pt = CGPoint(x: Double(c) * cellW, y: cy + edge + wob(min(c, cols - 1)))
+                if c == 0 { line.move(to: pt) } else { line.addLine(to: pt) }
+            }
+            ctx.stroke(line, with: .color(.white.opacity(0.55)), lineWidth: 1)
+        }
+
+        // A little pennant buoy at each end so it reads as a gate.
+        for side in [0.0, 1.0] {
+            let px = side == 0 ? 0.06 * w : 0.94 * w
+            let topY = cy - band * 0.5 - 0.05 * h + wob(side == 0 ? 0 : cols - 1)
+            var post = Path()
+            post.move(to: CGPoint(x: px, y: topY))
+            post.addLine(to: CGPoint(x: px, y: cy + band * 0.5))
+            ctx.stroke(post, with: .color(Color(white: 0.92)), lineWidth: 2.4)
+            ctx.stroke(post, with: .color(Sea.deep.opacity(0.5)), lineWidth: 0.8)
+            // fluttering triangular flag
+            let fld = (side == 0 ? 1.0 : -1.0)
+            let flutter = sin(t * 6 + side * 2) * 0.012 * w
+            var flag = Path()
+            flag.move(to: CGPoint(x: px, y: topY))
+            flag.addLine(to: CGPoint(x: px + fld * 0.075 * w + flutter, y: topY + 0.012 * h))
+            flag.addLine(to: CGPoint(x: px, y: topY + 0.028 * h))
+            flag.closeSubpath()
+            ctx.fill(flag, with: .color(Sea.coral.opacity(0.95)))
+        }
+    }
+
     // MARK: Line + hook ------------------------------------------------------
 
     /// The cast line going out (top-down) — a warm golden line from the rod tip to the hook point.

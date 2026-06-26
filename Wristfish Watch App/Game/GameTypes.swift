@@ -146,3 +146,205 @@ struct CaughtFish {
     let kind: FishKind
     let points: Int
 }
+
+// MARK: - Levels & game modes -------------------------------------------------
+
+/// One entry in a weighted fish table.
+struct FishOdds {
+    let kind: FishKind
+    let weight: Double
+}
+
+/// What can be caught in shallow vs deep ripples on a given level.
+struct FishTable {
+    let shallow: [FishOdds]
+    let deep: [FishOdds]
+
+    /// Pick a fish for the given depth. `r` is a 0…1 random roll.
+    func roll(deep: Bool, _ r: Double) -> FishKind {
+        let table = deep ? self.deep : self.shallow
+        guard !table.isEmpty else { return .herring }
+        let total = table.reduce(0) { $0 + $1.weight }
+        var x = r * total
+        for o in table { if x < o.weight { return o.kind }; x -= o.weight }
+        return table.last!.kind
+    }
+
+    /// Mostly small inshore fish.
+    static let inshore = FishTable(
+        shallow: [.init(kind: .herring, weight: 55), .init(kind: .mackerel, weight: 45)],
+        deep:    [.init(kind: .herring, weight: 35), .init(kind: .mackerel, weight: 45), .init(kind: .cod, weight: 20)])
+    /// The full default spread used by freeplay.
+    static let standard = FishTable(
+        shallow: [.init(kind: .boot, weight: 10), .init(kind: .herring, weight: 45),
+                  .init(kind: .mackerel, weight: 33), .init(kind: .cod, weight: 12)],
+        deep:    [.init(kind: .boot, weight: 8), .init(kind: .cod, weight: 27),
+                  .init(kind: .salmon, weight: 35), .init(kind: .tuna, weight: 30)])
+    /// Deep water, big fish — for the open-sea / trophy levels.
+    static let bluewater = FishTable(
+        shallow: [.init(kind: .mackerel, weight: 40), .init(kind: .cod, weight: 40), .init(kind: .salmon, weight: 20)],
+        deep:    [.init(kind: .cod, weight: 18), .init(kind: .salmon, weight: 40), .init(kind: .tuna, weight: 42)])
+}
+
+/// How often a hooked catch is a special instead of a fish.
+struct SpecialChances {
+    let mine: Double, chest: Double, pickaxe: Double
+    static let none     = SpecialChances(mine: 0, chest: 0, pickaxe: 0)
+    static let standard = SpecialChances(mine: 0.05, chest: 0.07, pickaxe: 0.06)
+    static let treasure = SpecialChances(mine: 0.06, chest: 0.12, pickaxe: 0.10)
+}
+
+/// A single obstacle/ripple placed at an EXACT spot — the building block for authored patterns.
+enum ScriptItem {
+    case rock(r: Double)
+    case lighthouse
+    case driftBoat(vx: Double)
+    case ripple(deep: Bool)
+}
+
+/// A scripted placement: when the level has travelled `at` units of water, drop `item` at exact x.
+/// (Distance-based so the pattern lands in the same place regardless of frame timing.)
+struct ScriptedSpawn {
+    let at: Double          // world distance into the level (0 = boating just began)
+    let x: Double           // exact normalized x, 0…1
+    let item: ScriptItem
+}
+
+/// A level's win condition. `nil` (on a config) means endless freeplay.
+enum Objective {
+    case score(Int)                       // reach this many points
+    case catchAny(Int)                    // land this many scoring fish
+    case catchSpecies(FishKind, Int)      // land this many of one species
+    case survive(Double)                  // last this many seconds
+    case combo(Int)                       // reach this combo multiplier
+    case noLoss(Int)                      // land this many in a row without a miss
+    case reachFinish                      // sail to the finish line (config.finishAt)
+}
+
+/// Everything that defines one playthrough — freeplay uses `.freeplay`, each campaign level its own.
+struct LevelConfig {
+    let id: Int                           // 0 = freeplay; 1…N = campaign
+    let title: String
+    let subtitle: String
+    let objective: Objective?             // nil = endless
+    let fixedTimeOfDay: Double?           // nil = cycle from day into night
+    let dayLength: Double
+    let baseScroll: Double
+    let scrollRamp: Double
+    let rampSeconds: Double
+    let rockSpawn: ClosedRange<Double>?   // nil = no procedural rocks (script only)
+    let hintSpawn: ClosedRange<Double>?   // nil = no procedural ripples
+    let lethal: Bool                      // do obstacles end the run?
+    let fish: FishTable
+    let specials: SpecialChances
+    let birds: Bool
+    let predator: Bool
+    let script: [ScriptedSpawn]
+    var finishAt: Double? = nil            // world distance to the finish line (for .reachFinish levels)
+
+    /// The endless score-chase. Renamed "Open Water" in the menu.
+    static let freeplay = LevelConfig(
+        id: 0, title: "Open Water", subtitle: "Endless · chase your best",
+        objective: nil, fixedTimeOfDay: nil, dayLength: 150,
+        baseScroll: 0.24, scrollRamp: 0.6, rampSeconds: 90,
+        rockSpawn: 1.4...2.6, hintSpawn: 1.8...3.0, lethal: true,
+        fish: .standard, specials: .standard, birds: true, predator: true, script: [])
+}
+
+// MARK: - Authored patterns + the campaign --------------------------------------
+
+extension LevelConfig {
+    /// A left-right slalom of rocks: `count` rocks spaced `gap` apart, starting at distance `start`.
+    private static func slalom(start: Double, gap: Double, count: Int, r: Double = 0.075) -> [ScriptedSpawn] {
+        (0..<count).map { i in
+            ScriptedSpawn(at: start + Double(i) * gap, x: i % 2 == 0 ? 0.28 : 0.72, item: .rock(r: r))
+        }
+    }
+    /// A narrow gate (two rocks) to thread between, centred on `centerX`.
+    private static func gate(at d: Double, centerX: Double, half: Double) -> [ScriptedSpawn] {
+        [ScriptedSpawn(at: d, x: max(0.08, centerX - half), item: .rock(r: 0.07)),
+         ScriptedSpawn(at: d, x: min(0.92, centerX + half), item: .rock(r: 0.07))]
+    }
+
+    /// The 10-level campaign. Each level teaches or tests one idea and ends the moment its goal is met.
+    static let campaign: [LevelConfig] = [
+        // 1 — steer, cast, reel. No danger.
+        LevelConfig(id: 1, title: "First Cast", subtitle: "Catch 3 fish",
+            objective: .catchAny(3), fixedTimeOfDay: 0.05, dayLength: 150,
+            baseScroll: 0.18, scrollRamp: 0.2, rampSeconds: 120,
+            rockSpawn: nil, hintSpawn: 1.2...2.0, lethal: false,
+            fish: .inshore, specials: .none, birds: false, predator: false, script: []),
+
+        // 2 — first rocks, taught with two wide gates.
+        LevelConfig(id: 2, title: "Leaving Port", subtitle: "Reach 150 points",
+            objective: .score(150), fixedTimeOfDay: 0.12, dayLength: 150,
+            baseScroll: 0.20, scrollRamp: 0.3, rampSeconds: 120,
+            rockSpawn: 2.2...3.6, hintSpawn: 1.4...2.4, lethal: true,
+            fish: .standard, specials: .none, birds: false, predator: false,
+            script: gate(at: 3, centerX: 0.5, half: 0.24) + gate(at: 6.5, centerX: 0.42, half: 0.22)),
+
+        // 3 — deep water; learn to read & reach deep ripples.
+        LevelConfig(id: 3, title: "The Deep", subtitle: "Land a salmon",
+            objective: .catchSpecies(.salmon, 1), fixedTimeOfDay: 0.42, dayLength: 150,
+            baseScroll: 0.20, scrollRamp: 0.3, rampSeconds: 120,
+            rockSpawn: 2.6...4.0, hintSpawn: 1.4...2.4, lethal: true,
+            fish: .bluewater, specials: .none, birds: false, predator: false, script: []),
+
+        // 4 — a scripted skerry slalom + a lighthouse, then sail across the finish line.
+        LevelConfig(id: 4, title: "Skerry Run", subtitle: "Reach the finish",
+            objective: .reachFinish, fixedTimeOfDay: 0.20, dayLength: 150,
+            baseScroll: 0.26, scrollRamp: 0.4, rampSeconds: 90,
+            rockSpawn: 2.4...3.6, hintSpawn: 2.0...3.2, lethal: true,
+            fish: .standard, specials: .none, birds: true, predator: false,
+            script: slalom(start: 2, gap: 1.4, count: 14) + [ScriptedSpawn(at: 9, x: 0.5, item: .lighthouse)],
+            finishAt: 13),
+
+        // 5 — night fishing; build a streak.
+        LevelConfig(id: 5, title: "Night Shift", subtitle: "Reach a 3× combo",
+            objective: .combo(3), fixedTimeOfDay: 0.85, dayLength: 150,
+            baseScroll: 0.22, scrollRamp: 0.3, rampSeconds: 120,
+            rockSpawn: 2.6...4.0, hintSpawn: 1.2...2.0, lethal: true,
+            fish: .standard, specials: .none, birds: true, predator: false, script: []),
+
+        // 6 — specials appear (chest/pickaxe/mine).
+        LevelConfig(id: 6, title: "Salvage", subtitle: "Reach 400 points",
+            objective: .score(400), fixedTimeOfDay: 0.50, dayLength: 150,
+            baseScroll: 0.24, scrollRamp: 0.4, rampSeconds: 100,
+            rockSpawn: 2.0...3.2, hintSpawn: 1.4...2.2, lethal: true,
+            fish: .standard, specials: .treasure, birds: true, predator: false, script: []),
+
+        // 7 — predators lurk; chase the trophy.
+        LevelConfig(id: 7, title: "Big Game", subtitle: "Land a tuna",
+            objective: .catchSpecies(.tuna, 1), fixedTimeOfDay: 0.35, dayLength: 150,
+            baseScroll: 0.24, scrollRamp: 0.4, rampSeconds: 100,
+            rockSpawn: 2.2...3.4, hintSpawn: 1.4...2.2, lethal: true,
+            fish: .bluewater, specials: .standard, birds: true, predator: true, script: []),
+
+        // 8 — a dense, fully authored gauntlet ending at a distant finish line.
+        LevelConfig(id: 8, title: "The Gauntlet", subtitle: "Reach the finish",
+            objective: .reachFinish, fixedTimeOfDay: 0.62, dayLength: 150,
+            baseScroll: 0.30, scrollRamp: 0.5, rampSeconds: 80,
+            rockSpawn: 1.8...2.8, hintSpawn: 2.4...3.6, lethal: true,
+            fish: .standard, specials: .none, birds: true, predator: false,
+            script: slalom(start: 2, gap: 1.1, count: 24)
+                + gate(at: 8, centerX: 0.5, half: 0.16) + gate(at: 14, centerX: 0.55, half: 0.15)
+                + [ScriptedSpawn(at: 5, x: 0.2, item: .driftBoat(vx: 0.08)),
+                   ScriptedSpawn(at: 11, x: 0.8, item: .lighthouse)],
+            finishAt: 20),
+
+        // 9 — precision: a clean streak with no losses.
+        LevelConfig(id: 9, title: "Flawless", subtitle: "Land 4 in a row, no misses",
+            objective: .noLoss(4), fixedTimeOfDay: 0.70, dayLength: 150,
+            baseScroll: 0.24, scrollRamp: 0.4, rampSeconds: 100,
+            rockSpawn: 2.4...3.6, hintSpawn: 1.4...2.2, lethal: true,
+            fish: .standard, specials: .standard, birds: true, predator: true, script: []),
+
+        // 10 — the finale: everything, at speed, in the dark.
+        LevelConfig(id: 10, title: "Master Angler", subtitle: "Reach 900 points",
+            objective: .score(900), fixedTimeOfDay: 0.90, dayLength: 150,
+            baseScroll: 0.30, scrollRamp: 0.7, rampSeconds: 70,
+            rockSpawn: 1.5...2.6, hintSpawn: 1.2...2.0, lethal: true,
+            fish: .standard, specials: .treasure, birds: true, predator: true,
+            script: slalom(start: 3, gap: 1.6, count: 10)),
+    ]
+}

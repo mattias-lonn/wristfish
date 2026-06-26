@@ -8,10 +8,32 @@ import SwiftUI
 
 struct GameView: View {
     @StateObject private var model = GameModel()
-    var onExit: () -> Void
+    let onExit: () -> Void
 
+    @State private var config: LevelConfig
     @State private var crown = 0.0
     @FocusState private var focused: Bool
+
+    init(config: LevelConfig = .freeplay, onExit: @escaping () -> Void) {
+        self.onExit = onExit
+        _config = State(initialValue: config)
+    }
+
+    /// The next campaign level after this one, if any.
+    private var nextLevel: LevelConfig? {
+        guard model.isCampaign else { return nil }
+        return LevelConfig.campaign.first { $0.id == config.id + 1 }
+    }
+
+    private func startLevel(_ c: LevelConfig) { config = c; model.start(c) }
+
+    /// Whether the level-goal banner should show (during active play, not on the end card).
+    private var showObjective: Bool {
+        switch model.phase {
+        case .boating, .casting, .reeling, .hooking, .surfacing, .landed: return true
+        default: return false
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -54,16 +76,28 @@ struct GameView: View {
                 }
             }
             hud
-            if model.scorePopActive && model.phase != .landed { scorePopView }
+            if model.scorePopActive && model.phase != .landed && model.phase != .gameOver { scorePopView }
             if model.phase == .landed   { landedCard }
-            if model.phase == .gameOver { gameOverCard }
+            if model.phase == .gameOver {
+                // A full-bleed frosted overlay — the glass runs edge to edge (no card border).
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                Rectangle()
+                    .fill(Sea.deep.opacity(0.22))           // gentle darken for text contrast
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                gameOverCard
+                    .padding(.horizontal, 22)
+            }
         }
         .focusable(true)
         .focused($focused)
         .digitalCrownRotation($crown, from: -1_000_000, through: 1_000_000, by: 0.5,
                               sensitivity: .high, isContinuous: true, isHapticFeedbackEnabled: false)
         .onChange(of: crown) { old, new in model.crown(delta: new - old) }
-        .onAppear { focused = true; model.start() }
+        .onAppear { focused = true; model.start(config) }
         .onDisappear { model.stop() }
     }
 
@@ -81,6 +115,19 @@ struct GameView: View {
             }
             .padding(.horizontal, 14)
             .padding(.top, 16)                      // sits level with the watch time
+
+            if model.isCampaign && showObjective {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(model.objectiveText)
+                            .font(.system(size: 11, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.9))
+                        Spacer()
+                    }
+                    meter(model.objectiveProgress, Sea.teal)
+                }
+                .padding(.horizontal, 14).padding(.top, 1)
+            }
 
             if model.doublePoints || model.rockBreak || model.comboActive {
                 HStack(spacing: 6) {
@@ -271,14 +318,22 @@ struct GameView: View {
         .onTapGesture { model.tap() }
     }
 
-    private var gameOverCard: some View {
-        VStack(spacing: 4) {
+    @ViewBuilder private var gameOverCard: some View {
+        if model.isCampaign {
+            if model.levelWon { campaignWinCard } else { campaignFailCard }
+        } else {
+            freeplayOverCard
+        }
+    }
+
+    private var freeplayOverCard: some View {
+        VStack(spacing: 5) {
             Text(model.crashIsMine ? "BLOWN UP" : "TRIP OVER")
                 .font(.system(.caption2, design: .rounded).weight(.bold))
                 .tracking(2)
                 .foregroundStyle(model.crashIsMine ? Color.red.opacity(0.9) : .secondary)
             Text("\(model.score)")
-                .font(.system(size: 40, weight: .heavy, design: .rounded))
+                .font(.system(size: 38, weight: .heavy, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(Sea.gradient)
                 .shadow(color: Sea.blue.opacity(0.35), radius: 7)
@@ -297,8 +352,71 @@ struct GameView: View {
                 Button("Menu", action: onExit)
                     .buttonStyle(.seaSecondary())
             }
-            .padding(.top, 6)
+            .padding(.top, 4)
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+    }
+
+    private var campaignWinCard: some View {
+        VStack(spacing: 6) {
+            Text("LEVEL \(config.id)")
+                .font(.system(.caption2, design: .rounded).weight(.bold)).tracking(3)
+                .foregroundStyle(.secondary)
+            Text("COMPLETE")
+                .font(.system(size: 26, weight: .black, design: .rounded))
+                .foregroundStyle(Sea.gradient)
+                .shadow(color: Sea.blue.opacity(0.4), radius: 6)
+            starsRow(model.levelStars)
+                .padding(.vertical, 2)
+            Text("\(model.score) pts")
+                .font(.system(size: 16, weight: .heavy, design: .rounded)).monospacedDigit()
+                .foregroundStyle(Sea.gold)
+            VStack(spacing: 5) {
+                if let next = nextLevel {
+                    Button("Next level") { startLevel(next) }
+                        .buttonStyle(.seaPrimary)
+                    Button("Menu", action: onExit).buttonStyle(.seaSecondary())
+                } else {
+                    Text("Campaign cleared! 🎣")
+                        .font(.caption2.weight(.semibold)).foregroundStyle(Sea.teal)
+                    Button("Menu", action: onExit).buttonStyle(.seaPrimary)
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private var campaignFailCard: some View {
+        VStack(spacing: 5) {
+            Text(model.crashIsMine ? "BLOWN UP" : "TRIP OVER")
+                .font(.system(.caption2, design: .rounded).weight(.bold)).tracking(2)
+                .foregroundStyle(model.crashIsMine ? Color.red.opacity(0.9) : .secondary)
+            Image(systemName: "target")
+                .font(.system(size: 22))
+                .foregroundStyle(Sea.coral.opacity(0.85))
+            Text(config.subtitle)
+                .font(.system(size: 14, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+            Text(model.objectiveText)
+                .font(.caption2).foregroundStyle(.secondary)
+            VStack(spacing: 5) {
+                Button("Retry") { model.restart() }
+                    .buttonStyle(.seaPrimary)
+                Button("Menu", action: onExit).buttonStyle(.seaSecondary())
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    /// Three stars, filled up to `n`.
+    private func starsRow(_ n: Int) -> some View {
+        HStack(spacing: 6) {
+            ForEach(0..<3, id: \.self) { i in
+                Image(systemName: i < n ? "star.fill" : "star")
+                    .font(.system(size: 22))
+                    .foregroundStyle(i < n ? Sea.gold : Color.white.opacity(0.22))
+                    .shadow(color: i < n ? Sea.gold.opacity(0.5) : .clear, radius: 4)
+            }
+        }
     }
 }
