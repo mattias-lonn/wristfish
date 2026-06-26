@@ -17,6 +17,39 @@ enum GameArt {
         CGPoint(x: x * s.width, y: y * s.height)
     }
 
+    // MARK: Time of day ------------------------------------------------------
+
+    private static func mix(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * t }
+
+    /// The (shallow, water, deep) water colours for a time of day (0 = bright day → 1 = deep night),
+    /// blended through four key frames: day → golden hour → dusk → night.
+    static func seaColors(_ tod: Double) -> (shallow: Color, water: Color, deep: Color) {
+        typealias Key = (pos: Double, sh: (Double, Double, Double),
+                         wa: (Double, Double, Double), de: (Double, Double, Double))
+        let keys: [Key] = [
+            (0.00, (0.10, 0.40, 0.55), (0.06, 0.22, 0.40), (0.03, 0.09, 0.18)),  // day
+            (0.45, (0.60, 0.46, 0.34), (0.30, 0.25, 0.33), (0.09, 0.08, 0.17)),  // golden hour
+            (0.72, (0.42, 0.28, 0.44), (0.18, 0.15, 0.32), (0.05, 0.05, 0.14)),  // dusk
+            (1.00, (0.09, 0.16, 0.30), (0.03, 0.07, 0.17), (0.01, 0.02, 0.07)),  // night
+        ]
+        let c = min(1, max(0, tod))
+        var lo = keys[0], hi = keys[keys.count - 1]
+        for i in 0..<(keys.count - 1) where c >= keys[i].pos && c <= keys[i + 1].pos {
+            lo = keys[i]; hi = keys[i + 1]; break
+        }
+        let span = hi.pos - lo.pos
+        let f = span > 0 ? (c - lo.pos) / span : 0
+        func blend(_ a: (Double, Double, Double), _ b: (Double, Double, Double)) -> Color {
+            Color(red: mix(a.0, b.0, f), green: mix(a.1, b.1, f), blue: mix(a.2, b.2, f))
+        }
+        return (blend(lo.sh, hi.sh), blend(lo.wa, hi.wa), blend(lo.de, hi.de))
+    }
+
+    /// How deep into night it is (0 until dusk, ramping to 1) — drives dimming, moonlight & wake glow.
+    static func nightAmount(_ tod: Double) -> Double { max(0, min(1, (tod - 0.6) / 0.4)) }
+    /// A bump that peaks around sunset — drives the warm horizon glow.
+    private static func sunsetAmount(_ tod: Double) -> Double { max(0, 1 - abs(tod - 0.56) / 0.34) }
+
     // MARK: Water background -------------------------------------------------
 
     /// An irregular soft "blob" outline (a wobbled circle) — clips caustic light into organic shapes.
@@ -34,13 +67,25 @@ enum GameArt {
         return path
     }
 
-    static func drawWater(_ ctx: GraphicsContext, _ s: CGSize, scroll: Double) {
+    static func drawWater(_ ctx: GraphicsContext, _ s: CGSize, scroll: Double, timeOfDay tod: Double = 0) {
         let w = s.width, h = s.height
+        let pal = seaColors(tod)
+        let night = nightAmount(tod)
+        let sunset = sunsetAmount(tod)
+        let dim = 1 - 0.55 * night                                  // caustics & glints fade after dark
 
         // 1) Depth gradient.
         ctx.fill(Path(CGRect(origin: .zero, size: s)), with: .linearGradient(
-            Gradient(colors: [Sea.shallow, Sea.water, Sea.deep]),
+            Gradient(colors: [pal.shallow, pal.water, pal.deep]),
             startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
+
+        // 1a) A warm sky glow spilling across the far water around sunset.
+        if sunset > 0.01 {
+            let warm = Color(red: 1.0, green: 0.58, blue: 0.34)
+            ctx.fill(Path(CGRect(x: 0, y: 0, width: w, height: h * 0.55)), with: .linearGradient(
+                Gradient(colors: [warm.opacity(0.32 * sunset), .clear]),
+                startPoint: .zero, endPoint: CGPoint(x: 0, y: h * 0.45)))
+        }
 
         // 1b) Depth — darker organic patches drifting slowly underneath, suggesting deeper water.
         let depths = 14
@@ -64,7 +109,7 @@ enum GameArt {
             c.scaleBy(x: elongX, y: squashY)
             c.clip(to: causticBlob(r: rad, seed: i + 50))          // different irregular shapes
             c.fill(Path(CGRect(x: -rad * 1.6, y: -rad * 1.6, width: rad * 3.2, height: rad * 3.2)),
-                   with: .radialGradient(Gradient(colors: [Sea.deep.opacity(op), .clear]),
+                   with: .radialGradient(Gradient(colors: [pal.deep.opacity(op), .clear]),
                                          center: .zero, startRadius: 0, endRadius: rad * 1.05))
         }
 
@@ -82,7 +127,7 @@ enum GameArt {
             let pulse = 0.5 + 0.5 * sin(scroll * 1.6 + Double(i) * 1.3)
             let cx = (hx + 0.02 * sin(scroll * 0.6 + Double(i))) * w
             let rad = (0.07 + 0.08 * hsz) * w
-            let op = 0.11 * (0.4 + 0.6 * pulse) * min(1, edgeFade)          // subtler than before
+            let op = 0.11 * (0.4 + 0.6 * pulse) * min(1, edgeFade) * dim     // subtler than before, fades after dark
             // Each caustic gets its own tilt, length and flatness → varied shapes.
             let angle = (Double((i * 47 + 11) % 100) / 100.0 - 0.5) * 1.4    // ±0.7 rad
             let elongX = 0.85 + 0.7 * Double((i * 53 + 9) % 100) / 100.0
@@ -105,12 +150,33 @@ enum GameArt {
             let gy = (Double(i) * 0.131 + scroll * speed).truncatingRemainder(dividingBy: 1) * h
             let r = 0.9 + Double(i % 3) * 0.7
             ctx.fill(Path(ellipseIn: CGRect(x: gx - r, y: gy - r, width: r * 2, height: r * 2)),
-                     with: .color(.white.opacity(0.18)))
+                     with: .color(.white.opacity(0.18 * dim)))
+        }
+
+        // 4b) After dark: a shimmering moon-reflection column + brighter star-glints on the water.
+        if night > 0.05 {
+            let moonX = w * 0.62
+            for k in 0..<11 {
+                let yy = ((Double(k) * 0.1 + scroll * 0.3).truncatingRemainder(dividingBy: 1)) * h
+                let ww = (0.05 + 0.03 * sin(scroll * 2 + Double(k))) * w
+                let op = 0.12 * night * (0.5 + 0.5 * sin(scroll * 3 + Double(k) * 1.7))
+                ctx.fill(Path(ellipseIn: CGRect(x: moonX - ww / 2, y: yy - 2, width: ww, height: 3)),
+                         with: .color(Color(red: 0.85, green: 0.90, blue: 1.0).opacity(op)))
+            }
+            for i in 0..<14 {
+                let gx = Double((i * 61) % 97) / 97.0 * w
+                let speed = 0.10 + Double(i % 4) * 0.04
+                let gy = (Double(i) * 0.137 + scroll * speed).truncatingRemainder(dividingBy: 1) * h
+                let tw = 0.5 + 0.5 * sin(scroll * 4 + Double(i))
+                let r = 0.8 + 0.8 * tw
+                ctx.fill(Path(ellipseIn: CGRect(x: gx - r, y: gy - r, width: r * 2, height: r * 2)),
+                         with: .color(.white.opacity((0.10 + 0.22 * tw) * night)))
+            }
         }
 
         // 5) Soft vignette for depth.
         ctx.fill(Path(CGRect(origin: .zero, size: s)), with: .radialGradient(
-            Gradient(colors: [.clear, Sea.deep.opacity(0.35)]),
+            Gradient(colors: [.clear, pal.deep.opacity(0.35 + 0.25 * night)]),
             center: CGPoint(x: w * 0.5, y: h * 0.5), startRadius: w * 0.32, endRadius: w * 0.85))
     }
 
@@ -483,7 +549,7 @@ enum GameArt {
     }
 
     static func drawBoat(_ ctx: GraphicsContext, _ s: CGSize, x: Double, boatY: Double,
-                         wake: [Double], t: Double, speed: Double = 1) {
+                         wake: [Double], t: Double, speed: Double = 1, timeOfDay tod: Double = 0) {
         let cx = x * s.width
         let cy = boatY * s.height
         let hw = 0.066 * s.width
@@ -495,7 +561,8 @@ enum GameArt {
         let bank = max(-0.3, min(0.3, (recent - older) * 9))
 
         // A living, curving wake behind (below) the boat — fades in as the boat gets up to speed.
-        drawWake(ctx, s, stern: CGPoint(x: cx, y: cy + hh * 0.9), wake: wake, t: t, strength: speed)
+        drawWake(ctx, s, stern: CGPoint(x: cx, y: cy + hh * 0.9), wake: wake, t: t, strength: speed,
+                 night: nightAmount(tod))
 
         var c = ctx
         c.translateBy(x: cx, y: cy)
@@ -545,12 +612,13 @@ enum GameArt {
     /// A soft, animated foam trail that follows the boat's recent path (curves as you steer).
     /// `strength` (0…1) fades the whole wake in as the boat gets up to speed.
     private static func drawWake(_ ctx: GraphicsContext, _ s: CGSize, stern: CGPoint, wake: [Double],
-                                 t: Double, strength: Double) {
+                                 t: Double, strength: Double, night: Double = 0) {
         guard wake.count > 3, strength > 0.02 else { return }
         let w = s.width
         let dy = 0.024 * s.height
         let n = wake.count
         let wakeBlue = Color(red: 0.62, green: 0.84, blue: 0.97)
+        let glow = Sea.teal                                        // bioluminescent trail after dark
 
         // Two tapering streams that diverge from the stern and curve along the boat's path.
         for side in [-1.0, 1.0] {
@@ -574,6 +642,10 @@ enum GameArt {
             for i in 1..<n {                                               // bright fading core line
                 let fade = 1 - Double(i) / Double(n)
                 var seg = Path(); seg.move(to: core[i - 1]); seg.addLine(to: core[i])
+                if night > 0.05 {                                          // soft glowing halo at night
+                    ctx.stroke(seg, with: .color(glow.opacity(0.45 * fade * strength * night)),
+                               lineWidth: 4.6 * fade + 1.6)
+                }
                 ctx.stroke(seg, with: .color(wakeBlue.opacity(0.55 * fade * strength)), lineWidth: 2.4 * fade + 0.8)
             }
         }
@@ -651,17 +723,18 @@ enum GameArt {
     /// back and continues off the top. Called twice per frame: `shadows: true` lays its soft shadow
     /// on the water (under the obstacles), `shadows: false` draws the gull on top.
     static func drawBird(_ ctx: GraphicsContext, _ s: CGSize, progress p: Double, dir: Double,
-                         t: Double, dive: Bool, diveX: Double, diveY: Double, shadows: Bool) {
+                         t: Double, dive: Bool, diveX: Double, diveY: Double, xOffset: Double = 0,
+                         shadows: Bool) {
         let w = s.width, h = s.height
         let alpha = min(1, min(p, 1 - p) / 0.12)                          // fade in/out at the ends
         guard alpha > 0 else { return }
 
-        // The base diagonal flyover (bottom → top).
+        // The base diagonal flyover (bottom → top). `xOffset` shifts it after a knock off course.
         let x0 = dir > 0 ? -0.15 : 1.15
         let x1 = dir > 0 ?  1.05 : -0.05
         let y0 = 0.70, y1 = 0.04
         func base(_ q: Double) -> CGPoint {
-            CGPoint(x: (x0 + (x1 - x0) * q) * w, y: (y0 + (y1 - y0) * q) * h + 0.012 * sin(t * 1.4) * h)
+            CGPoint(x: (x0 + (x1 - x0) * q + xOffset) * w, y: (y0 + (y1 - y0) * q) * h + 0.012 * sin(t * 1.4) * h)
         }
         // The dive: a snappy swoop that homes onto the fish, peaking late (high up the screen).
         let pd = 0.62, halfWin = 0.07
@@ -688,6 +761,35 @@ enum GameArt {
         } else {
             drawGull(ctx, at: cur, angle: heading, L: L, flap: flap, alpha: alpha, shadow: false)
         }
+    }
+
+    /// A single feather knocked loose from a clipped gull — a small curved vane that sways as it falls.
+    static func drawFeather(_ ctx: GraphicsContext, _ s: CGSize, _ f: Feather, dur: Double) {
+        let w = s.width, h = s.height
+        let life = min(1, max(0, f.age / dur))
+        let alpha = (1 - life) * (1 - life)                    // ease-out fade
+        guard alpha > 0 else { return }
+        let sway = sin(f.age * 7 + Double(f.seed % 100) * 0.1) * 0.18   // lazy side-to-side flutter
+        let c = CGPoint(x: (f.x) * w, y: f.y * h)
+        let L = 0.034 * w
+        var g = ctx
+        g.translateBy(x: c.x, y: c.y)
+        g.rotate(by: .radians(f.rot + sway))
+
+        let vane = Color(red: 0.96, green: 0.97, blue: 0.99).opacity(0.92 * alpha)
+        let quill = Color(red: 0.62, green: 0.66, blue: 0.72).opacity(0.9 * alpha)
+        // The vane: a pointed leaf shape around the central shaft.
+        var blade = Path()
+        blade.move(to: CGPoint(x: 0, y: -L * 0.5))
+        blade.addQuadCurve(to: CGPoint(x: 0, y: L * 0.5), control: CGPoint(x: L * 0.26, y: 0))
+        blade.addQuadCurve(to: CGPoint(x: 0, y: -L * 0.5), control: CGPoint(x: -L * 0.26, y: 0))
+        blade.closeSubpath()
+        g.fill(blade, with: .color(vane))
+        // The shaft down the middle.
+        var shaft = Path()
+        shaft.move(to: CGPoint(x: 0, y: -L * 0.5))
+        shaft.addLine(to: CGPoint(x: 0, y: L * 0.5))
+        g.stroke(shaft, with: .color(quill), lineWidth: max(0.6, L * 0.05))
     }
 
     // MARK: Line + hook ------------------------------------------------------
@@ -901,12 +1003,15 @@ enum GameArt {
         let surfaceY = 0.30 * h
 
         // --- Underwater scene -------------------------------------------------
+        let pal = seaColors(model.timeOfDay)
+        let night = nightAmount(model.timeOfDay)
         ctx.fill(Path(CGRect(origin: .zero, size: s)), with: .linearGradient(
-            Gradient(colors: [Sea.shallow, Sea.water, Sea.deep]),
+            Gradient(colors: [pal.shallow, pal.water, pal.deep]),
             startPoint: CGPoint(x: 0, y: surfaceY), endPoint: CGPoint(x: 0, y: h)))
-        // Hazy sky above the waterline.
+        // Hazy sky above the waterline — shifts from day blue toward a dark night sky.
+        let skyTop = Color(red: mix(0.55, 0.05, night), green: mix(0.80, 0.08, night), blue: mix(0.92, 0.20, night))
         ctx.fill(Path(CGRect(x: 0, y: 0, width: w, height: surfaceY)),
-                 with: .linearGradient(Gradient(colors: [Color(red: 0.55, green: 0.80, blue: 0.92), Sea.shallow]),
+                 with: .linearGradient(Gradient(colors: [skyTop, pal.shallow]),
                                        startPoint: .zero, endPoint: CGPoint(x: 0, y: surfaceY)))
         // God rays slanting down from the surface.
         for k in 0..<3 {

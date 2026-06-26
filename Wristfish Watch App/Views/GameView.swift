@@ -54,6 +54,7 @@ struct GameView: View {
                 }
             }
             hud
+            if model.scorePopActive && model.phase != .landed { scorePopView }
             if model.phase == .landed   { landedCard }
             if model.phase == .gameOver { gameOverCard }
         }
@@ -81,8 +82,18 @@ struct GameView: View {
             .padding(.horizontal, 14)
             .padding(.top, 16)                      // sits level with the watch time
 
-            if model.doublePoints || model.rockBreak {
+            if model.doublePoints || model.rockBreak || model.comboActive {
                 HStack(spacing: 6) {
+                    if model.comboActive {
+                        HStack(spacing: 2) {
+                            Image(systemName: "flame.fill").font(.system(size: 10, weight: .bold))
+                            Text("\(model.comboMult)×").font(.system(size: 12, weight: .black, design: .rounded))
+                        }
+                        .foregroundStyle(Sea.coral)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(.black.opacity(0.5), in: Capsule())
+                        .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
+                    }
                     if model.doublePoints {
                         powerChip(systemName: nil, text: "2×", time: model.doublePointsLeft, color: Sea.gold)
                     }
@@ -143,6 +154,34 @@ struct GameView: View {
         default:
             EmptyView()
         }
+    }
+
+    /// The "+points" that pops up and floats away after a catch.
+    private var scorePopView: some View {
+        let prog = model.scorePopProgress
+        let fadeIn = min(1, prog / 0.15)
+        let fadeOut = prog < 0.15 ? 1 : 1 - (prog - 0.15) / 0.85
+        return VStack(spacing: 1) {
+            if model.scorePopPerfect {
+                Text("PERFECT")
+                    .font(.system(size: 13, weight: .black, design: .rounded))
+                    .foregroundStyle(Sea.teal)
+            }
+            Text("+\(model.scorePop)")
+                .font(.system(size: 30, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Sea.gold)
+            if model.scorePopMult >= 2 {
+                Text("\(model.scorePopMult)× COMBO")
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Sea.coral)
+            }
+        }
+        .shadow(color: .black.opacity(0.6), radius: 3, y: 1)
+        .scaleEffect(0.7 + min(1, prog * 3) * 0.4)
+        .offset(y: -36 - prog * 52)
+        .opacity(fadeIn * fadeOut)
+        .allowsHitTesting(false)
     }
 
     /// Title over the splash as something surfaces (fish vs special).
@@ -210,6 +249,18 @@ struct GameView: View {
                 Text(c.points > 0 ? "+\(c.points)" : "No points")
                     .font(.system(size: 32, weight: .heavy, design: .rounded))
                     .foregroundStyle(c.points > 0 ? Sea.gold : .secondary)
+                if c.points > 0 && (model.lastPerfect || model.lastComboMult >= 2) {
+                    HStack(spacing: 6) {
+                        if model.lastPerfect {
+                            Text("PERFECT").font(.system(size: 11, weight: .black, design: .rounded))
+                                .foregroundStyle(Sea.teal)
+                        }
+                        if model.lastComboMult >= 2 {
+                            Text("\(model.lastComboMult)× COMBO").font(.system(size: 11, weight: .black, design: .rounded))
+                                .foregroundStyle(Sea.coral)
+                        }
+                    }
+                }
             }
             Text("Tap to keep fishing")
                 .font(.caption2)

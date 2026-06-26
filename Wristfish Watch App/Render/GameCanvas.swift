@@ -16,7 +16,7 @@ struct GameCanvas: View {
                 return
             }
 
-            GameArt.drawWater(ctx, size, scroll: model.scroll)
+            GameArt.drawWater(ctx, size, scroll: model.scroll, timeOfDay: model.timeOfDay)
 
             // Soft cloud shadows drift across the surface, under everything else.
             GameArt.drawCloudShadows(ctx, size, scroll: model.scroll)
@@ -29,7 +29,8 @@ struct GameCanvas: View {
             if model.birdActive {
                 GameArt.drawBird(ctx, size, progress: model.birdProgress, dir: model.birdDir,
                                  t: model.elapsed, dive: model.birdDive,
-                                 diveX: model.birdDiveTargetX, diveY: model.birdDiveTargetY, shadows: true)
+                                 diveX: model.birdDiveTargetX, diveY: model.birdDiveTargetY,
+                                 xOffset: model.birdXOffset, shadows: true)
             }
 
             for hint in model.hints { GameArt.drawRipple(ctx, size, hint) }
@@ -61,14 +62,19 @@ struct GameCanvas: View {
             }
 
             GameArt.drawBoat(ctx, size, x: model.boatX, boatY: model.boatY,
-                             wake: model.wakeTrail, t: model.elapsed, speed: model.boatSpeed)
+                             wake: model.wakeTrail, t: model.elapsed, speed: model.boatSpeed,
+                             timeOfDay: model.timeOfDay)
 
             // The gull itself flies over the top of everything — straight across, or diving for a fish.
             if model.birdActive {
                 GameArt.drawBird(ctx, size, progress: model.birdProgress, dir: model.birdDir,
                                  t: model.elapsed, dive: model.birdDive,
-                                 diveX: model.birdDiveTargetX, diveY: model.birdDiveTargetY, shadows: false)
+                                 diveX: model.birdDiveTargetX, diveY: model.birdDiveTargetY,
+                                 xOffset: model.birdXOffset, shadows: false)
             }
+
+            // Feathers knocked loose by a clipped gull, fluttering down over the water.
+            for f in model.feathers { GameArt.drawFeather(ctx, size, f, dur: model.featherDuration) }
 
             if model.phase == .crashing {
                 if model.crashIsMine {

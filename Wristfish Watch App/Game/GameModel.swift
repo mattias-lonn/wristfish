@@ -80,6 +80,9 @@ final class GameModel: ObservableObject {
     private(set) var birdDive = false          // this pass is a dive to snatch a fish in front of you
     private(set) var birdDiveTargetX = 0.5     // live position of the fish it's diving at…
     private(set) var birdDiveTargetY = 0.5     // …tracked so the swoop hits it exactly
+    private(set) var birdXOffset = 0.0         // horizontal shift after the gull is knocked off course
+    private(set) var birdHit = false           // your cast clipped it this pass (once per pass)
+    private(set) var feathers: [Feather] = []  // feathers fluttering down from a clipped gull
 
     // Reeling state
     private(set) var hooked: FishKind?
@@ -92,6 +95,16 @@ final class GameModel: ObservableObject {
     private(set) var castReach = 0.0            // how far the current cast has reached (aiming/locked)
     private(set) var lastCatch: CaughtFish?
     private(set) var isBest = false             // this trip beat the stored best
+
+    // Combo — consecutive catches build a multiplier; a missed cast / lost fish / crash breaks it.
+    private(set) var streak = 0
+    private(set) var comboMult = 1
+    private(set) var lastComboMult = 1          // combo that applied to the last catch (for the card)
+    private(set) var lastPerfect = false        // the last catch was a clean (perfect) reel
+    // A floating "+points" that rises and fades right after a catch.
+    private(set) var scorePop = 0
+    private(set) var scorePopMult = 1
+    private(set) var scorePopPerfect = false
 
     // Special hooks & their effects.
     private(set) var hookedSpecial: Special?    // a chest / pickaxe / mine is on the line
@@ -137,10 +150,35 @@ final class GameModel: ObservableObject {
     private var birdCommitted = false          // the dive has locked onto a target
     private var birdGrabbed = false            // it has already snatched (once per dive)
     private var birdDiveHintID: UUID?          // the exact fish-ripple it's diving at
-    let leapDuration = 0.85                     // how long a fish's leap lasts
+    private var birdSpeed = 1.0                 // eased flight-speed multiplier (1 normal, <1 when the line slows it)
+    private var birdSpeedTarget = 1.0
+    private let birdSlowFactor = 0.42          // how far the gull slows when your line is in front of it
+    private let birdHitRadius  = 0.065         // how close the hook must pass to clip the gull
+    let featherDuration = 1.3                   // how long a knocked-loose feather lingers
+    let leapDuration = 0.85                      // how long a fish's leap lasts
     private var leapSpawn = Double.random(in: 3...7)
 
+    // Combo + catch juice tunables.
+    private let maxCombo = 5                      // the streak multiplier caps here
+    private let perfectBonus = 1.5               // a perfect (clean) reel pays this much extra
+    private let perfectTol = 0.45                // total out-of-zone time that still counts as perfect
+    let scorePopDuration = 1.1                    // how long the floating "+points" lingers
+    private var scorePopT = 99.0                 // ≥ duration → inactive
+    private var reelOutTime = 0.0                // time spent outside the zone this reel (for PERFECT)
+
+    // Day → night: the trip slides from daylight through sunset into night over this many seconds.
+    private let dayLength = 150.0
+
     var ramp: Double { min(1, elapsed / rampSeconds) }
+
+    /// 0 = bright day → 1 = deep night. Drives the water palette and lighting.
+    var timeOfDay: Double { min(1, elapsed / dayLength) }
+
+    /// The streak multiplier is worth showing once it's ≥ 2×.
+    var comboActive: Bool { comboMult >= 2 }
+    /// The floating "+points" is still on screen.
+    var scorePopActive: Bool { scorePopT < scorePopDuration }
+    var scorePopProgress: Double { min(1, scorePopT / scorePopDuration) }
 
     /// How far the gull is across its flyover (0…1) — read by the art.
     var birdProgress: Double { min(1, birdT / birdDuration) }
@@ -225,6 +263,8 @@ final class GameModel: ObservableObject {
         hardFish = false; predatorActive = false; predatorPending = false; predatorT = 0
         surfaceCaught = false; surfaceT = 0; landedT = 0; zonePhase = 0
         lastCatch = nil; flash = ""; flashTimer = 0; isBest = false
+        streak = 0; comboMult = 1; lastComboMult = 1; lastPerfect = false
+        scorePop = 0; scorePopMult = 1; scorePopPerfect = false; scorePopT = 99; reelOutTime = 0
         hookedSpecial = nil; lastSpecial = nil; doublePointsT = 0; rockBreakT = 0
         shatters = []; crashIsMine = false
         rockSpawn = 1.6; hintSpawn = 1.0; castReach = 0
@@ -232,12 +272,17 @@ final class GameModel: ObservableObject {
         reelClock = 0; wasInZone = false; scrollFactor = 1; wakeTrail = []; boatSpeed = 0
         birdActive = false; birdT = 0; birdDive = false; birdCommitted = false; birdGrabbed = false
         birdSpawn = Double.random(in: 8...16)
+        birdXOffset = 0; birdHit = false; birdSpeed = 1; birdSpeedTarget = 1; feathers = []
     }
 
-    /// A lone gull drifts across every so often (ambient — no gameplay effect).
+    /// A lone gull drifts across every so often. Your cast can now interact with it: a line dropped
+    /// in front of it slows it down (like a banana on the track), and a line that clips it knocks
+    /// feathers loose and sends it veering off the other way.
     private func updateBird(_ dt: Double) {
         if birdActive {
-            birdT += dt
+            updateBirdInteraction()                       // line in front slows it / a clip knocks it about
+            birdSpeed += (birdSpeedTarget - birdSpeed) * 0.18
+            birdT += dt * birdSpeed
             if birdDive {
                 // Lock onto a real fish far ahead just before the swoop — or call it off if none.
                 if !birdCommitted && birdProgress > 0.54 {
@@ -263,8 +308,12 @@ final class GameModel: ObservableObject {
                     }
                 }
             }
-            if birdT >= birdDuration { birdActive = false; birdSpawn = Double.random(in: 18...34) }
+            if birdT >= birdDuration {
+                birdActive = false; birdSpawn = Double.random(in: 18...34)
+                birdSpeed = 1; birdSpeedTarget = 1
+            }
         } else {
+            birdSpeed = 1; birdSpeedTarget = 1
             birdSpawn -= dt
             if birdSpawn <= 0 {
                 birdActive = true; birdT = 0
@@ -272,8 +321,85 @@ final class GameModel: ObservableObject {
                 birdDive = Double.random(in: 0...1) < birdDiveChance   // sometimes it dives, sometimes not
                 birdCommitted = false; birdGrabbed = false; birdDiveHintID = nil
                 birdDiveTargetX = boatX; birdDiveTargetY = boatY - 0.28
+                birdXOffset = 0; birdHit = false
             }
         }
+    }
+
+    /// The gull's normalized position for gameplay — mirrors the art's flight path in GameArt.drawBird.
+    private func birdPos(_ p: Double) -> CGPoint {
+        let x0 = birdDir > 0 ? -0.15 : 1.15
+        let x1 = birdDir > 0 ?  1.05 : -0.05
+        let y0 = 0.70, y1 = 0.04
+        let bx = x0 + (x1 - x0) * p + birdXOffset
+        let by = y0 + (y1 - y0) * p + 0.012 * sin(elapsed * 1.4)
+        guard birdDive else { return CGPoint(x: bx, y: by) }
+        let pd = 0.62, halfWin = 0.07
+        let d = abs(p - pd)
+        var k = 0.0
+        if d < halfWin { let u = 1 - d / halfWin; k = u * u * (3 - 2 * u) }
+        return CGPoint(x: bx + (birdDiveTargetX - bx) * k, y: by + (birdDiveTargetY - by) * k)
+    }
+
+    /// While you're aiming, see whether the line is in front of the gull (slow it) or clips it (bonk it).
+    private func updateBirdInteraction() {
+        guard !birdHit, phase == .casting, castReach > 0 else { birdSpeedTarget = 1; return }
+        let hook = CGPoint(x: boatX, y: boatY - castReach)
+        let bp = birdPos(birdProgress)
+        let dx = hook.x - bp.x, dy = hook.y - bp.y
+        if dx * dx + dy * dy < birdHitRadius * birdHitRadius {     // the hook caught it
+            hitBird(at: bp)
+            birdSpeedTarget = 1
+            return
+        }
+        // "In front" = the hook sits ahead of it up the screen, within its lane — it slows to approach.
+        let gap = bp.y - hook.y
+        let ahead = gap > 0 && gap < 0.32 && abs(dx) < 0.20
+        birdSpeedTarget = ahead ? birdSlowFactor : 1
+    }
+
+    /// Your cast clipped the gull: feathers burst loose and it veers off the opposite way.
+    private func hitBird(at bp: CGPoint) {
+        birdHit = true
+        birdDive = false           // a clipped gull abandons any dive (so it can't steal a fish)
+        birdGrabbed = true         // …and never grabs
+        // Reverse its horizontal direction while keeping the on-screen position continuous (no teleport).
+        let p = birdProgress
+        let curBaseX = (0.5 - 0.65 * birdDir) + (1.20 * birdDir) * p + birdXOffset
+        birdDir = -birdDir
+        birdXOffset = curBaseX - ((0.5 - 0.65 * birdDir) + (1.20 * birdDir) * p)
+        spawnFeathers(at: bp)
+        showFlash("Bonk!")
+        haptics.play(.tug)
+    }
+
+    private func spawnFeathers(at p: CGPoint) {
+        for _ in 0..<8 {
+            let ang = Double.random(in: 0..<(2 * .pi))
+            let spd = Double.random(in: 0.05...0.14)
+            feathers.append(Feather(
+                x: p.x + Double.random(in: -0.012...0.012),
+                y: p.y + Double.random(in: -0.012...0.012),
+                vx: cos(ang) * spd,
+                vy: sin(ang) * spd - 0.03,                 // a touch of initial lift before they settle
+                rot: Double.random(in: 0..<(2 * .pi)),
+                vr: Double.random(in: -3.5...3.5),
+                seed: Int.random(in: 0..<100_000)))
+        }
+    }
+
+    /// Feathers drift sideways, ease into a gentle fall, spin, and fade out.
+    private func updateFeathers(_ dt: Double) {
+        guard !feathers.isEmpty else { return }
+        for i in feathers.indices {
+            feathers[i].age += dt
+            feathers[i].x += feathers[i].vx * dt
+            feathers[i].y += feathers[i].vy * dt
+            feathers[i].vy += 0.16 * dt              // settle into a fall
+            feathers[i].vx *= (1 - 0.7 * dt)         // air drag
+            feathers[i].rot += feathers[i].vr * dt
+        }
+        feathers.removeAll { $0.age >= featherDuration }
     }
 
     /// The topmost fish-ripple ahead of the boat to dive at, if any (within the boat's lane).
@@ -315,6 +441,8 @@ final class GameModel: ObservableObject {
         if flashTimer > 0 { flashTimer -= dt; if flashTimer <= 0 { flash = "" } }
         if doublePointsT > 0 { doublePointsT = max(0, doublePointsT - dt) }   // power-ups tick in real time
         if rockBreakT > 0 { rockBreakT = max(0, rockBreakT - dt) }
+        updateFeathers(dt)                                                    // knocked-loose feathers settle & fade
+        if scorePopT < scorePopDuration { scorePopT += dt }                   // the floating "+points" rises & fades
 
         // Ease world speed: full while boating, a slow drift while aiming (debounce in & out).
         let targetFactor = (phase == .casting) ? castScrollSlow : 1.0
@@ -463,6 +591,7 @@ final class GameModel: ObservableObject {
         let inZone = abs(marker - zoneCenter) < curZoneHalf
         if inZone && !wasInZone { haptics.play(.reel) }   // little tick as you catch the zone
         wasInZone = inZone
+        if !inZone { reelOutTime += dt }                  // drifting out costs your PERFECT
 
         reelProgress += (inZone ? curFillRate : -drainRate) * dt
 
@@ -484,6 +613,7 @@ final class GameModel: ObservableObject {
             zonePhase = Double.random(in: 0...(2 * .pi))
             reelClock = 0
             wasInZone = false
+            reelOutTime = 0
             showFlash("It took the bait!")
             haptics.play(.bite)
         }
@@ -530,6 +660,7 @@ final class GameModel: ObservableObject {
         zoneCenter = 0.5 + sin(zonePhase) * zoneAmp
         reelClock = 0
         wasInZone = false
+        reelOutTime = 0
         hookT = 0
         hardFish = false
         predatorActive = false
@@ -565,14 +696,31 @@ final class GameModel: ObservableObject {
     private func land() {
         if let sp = hookedSpecial { landSpecial(sp); return }
         guard let kind = hooked else { return }
-        let pts = kind.points * scoreMultiplier        // doubled while a chest's bonus is running
+
+        // A scoring fish extends the streak; an old boot lands but neither builds nor breaks it.
+        let scoring = kind.points > 0
+        if scoring { streak += 1; comboMult = min(maxCombo, streak) }
+        let perfect = scoring && reelOutTime <= perfectTol      // never (really) left the zone
+
+        let mult = scoreMultiplier * (scoring ? comboMult : 1)  // chest × combo streak
+        var pts = kind.points * mult
+        if perfect { pts = Int((Double(pts) * perfectBonus).rounded()) }
         score += pts
+
         lastCatch = CaughtFish(kind: kind, points: pts)
         lastSpecial = nil
+        lastComboMult = scoring ? comboMult : 1
+        lastPerfect = perfect
+        if scoring { triggerScorePop(pts, mult: comboMult, perfect: perfect) }
+
         surfaceCaught = true
         surfaceT = 0
         phase = .surfacing           // splash/flash transition → the result card
-        haptics.play(kind.points >= 90 ? .catchBig : .catchSmall)
+        haptics.play(kind.points >= 90 || comboMult >= 3 || perfect ? .catchBig : .catchSmall)
+    }
+
+    private func triggerScorePop(_ value: Int, mult: Int, perfect: Bool) {
+        scorePop = value; scorePopMult = mult; scorePopPerfect = perfect; scorePopT = 0
     }
 
     /// Reeled a special all the way up: claim the chest/pickaxe — or set off the mine.
@@ -611,6 +759,7 @@ final class GameModel: ObservableObject {
     }
 
     private func lose(_ reason: String) {
+        if hookedSpecial != .mine { streak = 0; comboMult = 1 }   // a whiff or lost fish breaks the streak (a mine bail doesn't)
         showFlash(hookedSpecial == .mine ? "Phew — let it go!" : reason)   // bailing a mine is the smart play
         haptics.play(.miss)
         if phase == .reeling {       // we had something on — play the transition out

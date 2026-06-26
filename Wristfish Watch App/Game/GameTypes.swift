@@ -119,6 +119,19 @@ struct Shatter: Identifiable {
     var age: Double = 0
 }
 
+/// A feather knocked loose when your cast clips a passing gull — it flutters down and fades.
+struct Feather: Identifiable {
+    let id = UUID()
+    var x: Double
+    var y: Double
+    var vx: Double            // sideways drift (normalized / s)
+    var vy: Double            // vertical drift (normalized / s)
+    var rot: Double           // current rotation (radians)
+    var vr: Double            // spin speed (rad / s)
+    var seed: Int
+    var age: Double = 0
+}
+
 /// A fish leaping out of the water — a brief ambient flourish.
 struct Leap: Identifiable {
     let id = UUID()
