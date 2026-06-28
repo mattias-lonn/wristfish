@@ -184,12 +184,14 @@ struct FishTable {
     let shallow: [FishOdds]
     let deep: [FishOdds]
 
-    /// Pick a fish for the given depth. `r` is a 0…1 random roll.
-    func roll(deep: Bool, _ r: Double) -> FishKind {
+    /// Pick a fish for the given depth. `r` is a 0…1 random roll. `bigBias` (≥0) skews the pick toward
+    /// the end of the table — the bigger fish — which is how the night shift coaxes up trophies.
+    func roll(deep: Bool, _ r: Double, bigBias: Double = 0) -> FishKind {
         let table = deep ? self.deep : self.shallow
         guard !table.isEmpty else { return .herring }
+        let rr = bigBias > 0 ? pow(r, 1.0 / (1.0 + bigBias)) : r   // push the roll toward 1 (the last, biggest entries)
         let total = table.reduce(0) { $0 + $1.weight }
-        var x = r * total
+        var x = rr * total
         for o in table { if x < o.weight { return o.kind }; x -= o.weight }
         return table.last!.kind
     }

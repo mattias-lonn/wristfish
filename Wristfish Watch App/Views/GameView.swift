@@ -14,6 +14,11 @@ struct GameView: View {
     @State private var crown = 0.0
     @FocusState private var focused: Bool
 
+    // Staged entrance for the end-of-level card: frosted glass fades in, stars pop one-by-one, then the rest.
+    @State private var cardIn = false
+    @State private var starsShown = 0
+    @State private var winDetailsIn = false
+
     init(config: LevelConfig = .freeplay, onExit: @escaping () -> Void) {
         self.onExit = onExit
         _config = State(initialValue: config)
@@ -26,6 +31,26 @@ struct GameView: View {
     }
 
     private func startLevel(_ c: LevelConfig) { config = c; model.start(c) }
+
+    /// Reveal the end card in stages: glass fades in → (on a win) stars pop one-by-one with a haptic → rest.
+    private func revealEndCard() {
+        cardIn = false; starsShown = 0; winDetailsIn = false
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) { cardIn = true }
+        guard model.isCampaign && model.levelWon else {              // fail / freeplay: just fade the card in
+            withAnimation(.easeOut(duration: 0.3).delay(0.12)) { winDetailsIn = true }
+            return
+        }
+        let stars = max(1, model.levelStars)
+        for i in 0..<stars {                                        // each earned star springs in with a tick
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5 + Double(i) * 0.34) {
+                withAnimation(.spring(response: 0.36, dampingFraction: 0.5)) { starsShown = i + 1 }
+                HapticsManager.shared.play(.reel)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5 + Double(stars) * 0.34 + 0.05) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { winDetailsIn = true }
+        }
+    }
 
     /// Whether the level-goal banner should show (during active play, not on the end card).
     private var showObjective: Bool {
@@ -83,13 +108,17 @@ struct GameView: View {
                 Rectangle()
                     .fill(.ultraThinMaterial)
                     .ignoresSafeArea()
+                    .opacity(cardIn ? 1 : 0)
                     .allowsHitTesting(false)
                 Rectangle()
                     .fill(Sea.deep.opacity(0.22))           // gentle darken for text contrast
                     .ignoresSafeArea()
+                    .opacity(cardIn ? 1 : 0)
                     .allowsHitTesting(false)
                 gameOverCard
                     .padding(.horizontal, 22)
+                    .scaleEffect(cardIn ? 1 : 0.92)
+                    .opacity(cardIn ? 1 : 0)
             }
         }
         .focusable(true)
@@ -97,6 +126,10 @@ struct GameView: View {
         .digitalCrownRotation($crown, from: -1_000_000, through: 1_000_000, by: 0.5,
                               sensitivity: .high, isContinuous: true, isHapticFeedbackEnabled: false)
         .onChange(of: crown) { old, new in model.crown(delta: new - old) }
+        .onChange(of: model.phase) { _, new in
+            if new == .gameOver { revealEndCard() }
+            else { cardIn = false; starsShown = 0; winDetailsIn = false }
+        }
         .onAppear { focused = true; model.start(config) }
         .onDisappear { model.stop() }
     }
@@ -106,11 +139,12 @@ struct GameView: View {
     private var hud: some View {
         VStack {
             HStack {
-                Text("\(model.score)")
+                Text("\(model.hudScore)")
                     .font(.system(.headline, design: .rounded).weight(.heavy))
                     .monospacedDigit()
                     .foregroundStyle(Sea.gold)
                     .shadow(color: .black.opacity(0.7), radius: 2, y: 1)
+                    .scaleEffect(model.scoreBumpScale, anchor: .leading)
                 Spacer()
             }
             .padding(.horizontal, 14)
@@ -393,23 +427,27 @@ struct GameView: View {
                 .font(.system(size: 26, weight: .black, design: .rounded))
                 .foregroundStyle(Sea.gradient)
                 .shadow(color: Sea.blue.opacity(0.4), radius: 6)
-            starsRow(model.levelStars)
+            starsRow(model.levelStars, shown: starsShown)
                 .padding(.vertical, 2)
-            Text("\(model.score) pts")
-                .font(.system(size: 16, weight: .heavy, design: .rounded)).monospacedDigit()
-                .foregroundStyle(Sea.gold)
-            VStack(spacing: 5) {
-                if let next = nextLevel {
-                    Button("Next level") { startLevel(next) }
-                        .buttonStyle(.seaPrimary)
-                    Button("Menu", action: onExit).buttonStyle(.seaSecondary())
-                } else {
-                    Text("Campaign cleared! 🎣")
-                        .font(.caption2.weight(.semibold)).foregroundStyle(Sea.teal)
-                    Button("Menu", action: onExit).buttonStyle(.seaPrimary)
+            VStack(spacing: 6) {
+                Text("\(model.score) pts")
+                    .font(.system(size: 16, weight: .heavy, design: .rounded)).monospacedDigit()
+                    .foregroundStyle(Sea.gold)
+                VStack(spacing: 5) {
+                    if let next = nextLevel {
+                        Button("Next level") { startLevel(next) }
+                            .buttonStyle(.seaPrimary)
+                        Button("Menu", action: onExit).buttonStyle(.seaSecondary())
+                    } else {
+                        Text("Campaign cleared! 🎣")
+                            .font(.caption2.weight(.semibold)).foregroundStyle(Sea.teal)
+                        Button("Menu", action: onExit).buttonStyle(.seaPrimary)
+                    }
                 }
+                .padding(.top, 4)
             }
-            .padding(.top, 4)
+            .opacity(winDetailsIn ? 1 : 0)
+            .offset(y: winDetailsIn ? 0 : 10)
         }
     }
 
@@ -436,14 +474,21 @@ struct GameView: View {
         }
     }
 
-    /// Three stars, filled up to `n`.
-    private func starsRow(_ n: Int) -> some View {
+    /// Three star slots; the `shown` earned stars pop in on top of dim placeholders.
+    private func starsRow(_ total: Int, shown: Int) -> some View {
         HStack(spacing: 6) {
             ForEach(0..<3, id: \.self) { i in
-                Image(systemName: i < n ? "star.fill" : "star")
-                    .font(.system(size: 22))
-                    .foregroundStyle(i < n ? Sea.gold : Color.white.opacity(0.22))
-                    .shadow(color: i < n ? Sea.gold.opacity(0.5) : .clear, radius: 4)
+                ZStack {
+                    Image(systemName: "star")                    // always-present dim slot
+                        .foregroundStyle(.white.opacity(0.22))
+                    if i < total && i < shown {                  // earned star pops in
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(Sea.gold)
+                            .shadow(color: Sea.gold.opacity(0.6), radius: 5)
+                            .transition(.scale(scale: 0.2).combined(with: .opacity))
+                    }
+                }
+                .font(.system(size: 22))
             }
         }
     }

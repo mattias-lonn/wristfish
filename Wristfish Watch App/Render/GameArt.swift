@@ -1816,11 +1816,12 @@ enum GameArt {
         let sway = sin(t * (4 + struggle * 5)) * (0.04 + struggle * 0.06)
         let mouth = CGPoint(x: (0.52 + sway) * w, y: (0.80 - 0.44 * p) * h)
         let landing = model.phase == .surfacing && model.surfaceCaught
-        let eaten = (model.predatorActive && model.predatorProgress > 0.55)      // the chomp moment
-            || (landing && model.surfaceProgress > 0.2)                          // hauled out of the water
-        if let sp = model.hookedSpecial, !eaten {
+        let chomped = model.predatorActive && model.predatorProgress > 0.55      // the predator's chomp moment
+        let specialEaten = chomped || (landing && model.surfaceProgress > 0.2)   // specials just vanish on land
+        if let sp = model.hookedSpecial, !specialEaten {
             drawSpecial(ctx, sp, at: mouth, size: 0.17 * w * (0.7 + 0.5 * p), t: t)
-        } else if let kind = model.hooked, !eaten {
+        } else if let kind = model.hooked, !chomped, !landing {
+            // Underwater, fighting on the line. (On a successful land it instead bursts from the splash, below.)
             let size = (0.13 + kind.fight * 0.05) * w * (0.7 + 0.5 * p)   // grows as it nears
             drawFightingFish(ctx, kind: kind, mouth: mouth, size: size, struggle: struggle, t: t)
         }
@@ -1862,14 +1863,34 @@ enum GameArt {
         ctx.stroke(Path(ellipseIn: CGRect(x: mouth.x - 12, y: surfaceY - 4, width: 24, height: 9)),
                    with: .color(Sea.foam.opacity(0.35)), lineWidth: 1)
 
-        // Catch splash — a big water crown erupts where the fish came out.
+        // Catch splash — a big water crown erupts where the fish came out…
         if landing {
             drawCatchSplash(ctx, s, center: CGPoint(x: mouth.x, y: surfaceY), progress: model.surfaceProgress)
+            // …and the fish bursts up out of it, arcing off toward the boat (not just empty water).
+            if let kind = model.hooked {
+                drawCatchBurst(ctx, s, kind: kind, from: CGPoint(x: mouth.x, y: surfaceY),
+                               progress: model.surfaceProgress, t: t)
+            }
         }
 
         // --- The fight gauge -------------------------------------------------
         drawFightGauge(ctx, s, marker: model.marker, zoneCenter: model.zoneCenter,
                        zoneHalf: model.zoneHalfWidth, inZone: inZone)
+    }
+
+    /// The caught fish leaping up out of the catch splash — swells out of the crown, banks, then exits & fades.
+    private static func drawCatchBurst(_ ctx: GraphicsContext, _ s: CGSize, kind: FishKind,
+                                       from: CGPoint, progress: Double, t: Double) {
+        let w = s.width, h = s.height
+        let p = max(0, min(1, progress))
+        let y = from.y - p * (from.y + 0.16 * h)                  // surface → up off the top edge
+        let x = from.x + sin(p * .pi) * 0.05 * w                  // a gentle lateral arc
+        let size = (0.14 + kind.fight * 0.05) * w * (0.85 + 0.35 * sin(p * .pi))   // swells out of the crown
+        let lean = sin(p * .pi) * 0.5 + sin(t * 9) * 0.08         // bank through the leap + a little wriggle
+        let fade = p < 0.7 ? 1.0 : max(0, 1 - (p - 0.7) / 0.3)
+        var c = ctx
+        c.opacity = fade
+        drawFightingFish(c, kind: kind, mouth: CGPoint(x: x, y: y), size: size, struggle: 0.25, t: t, lean: lean)
     }
 
     /// Vertical balance gauge on the left: a drifting safe zone + your Crown-controlled marker.
@@ -1925,15 +1946,16 @@ enum GameArt {
     }
 
     private static func drawFightingFish(_ ctx: GraphicsContext, kind: FishKind, mouth: CGPoint,
-                                         size: Double, struggle: Double, t: Double) {
+                                         size: Double, struggle: Double, t: Double, lean: Double = 0) {
         var c = ctx
         c.translateBy(x: mouth.x, y: mouth.y)
 
         if kind == .boot { drawBoot(c, size: size, t: t); return }
 
-        // Head sits at the origin (the line's end) and points up; thrashing swings the body.
+        // Head sits at the origin (the line's end) and points up; thrashing swings the body. `lean`
+        // tilts the whole fish (used to bank it through a leap as it bursts out of the water).
         let swing = sin(t * (5 + struggle * 6)) * (0.18 + struggle * 0.5)
-        c.rotate(by: .radians(-1.05 + swing))
+        c.rotate(by: .radians(-1.05 + swing + lean))
 
         let st = fishStyle(kind)
         let len = size * st.len, wid = size * st.width   // body runs along −x (so it hangs down from the head)

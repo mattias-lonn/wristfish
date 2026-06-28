@@ -118,6 +118,9 @@ final class GameModel: ObservableObject {
     private(set) var hints: [Hint] = []
     private(set) var leaps: [Leap] = []          // fish leaping out of the water
     private(set) var score: Int = 0
+    private(set) var displayScore: Double = 0   // HUD score, eased toward `score` for a satisfying count-up
+    private var scoreBumpT = 1.0                 // ≥ scoreBumpDur → inactive (one-shot scale punch on a gain)
+    private let scoreBumpDur = 0.32
     private(set) var elapsed: Double = 0
 
     // A lone gull that passes over now and then — and very rarely dives to snatch your catch.
@@ -376,6 +379,18 @@ final class GameModel: ObservableObject {
     var scorePopActive: Bool { scorePopT < scorePopDuration }
     var scorePopProgress: Double { min(1, scorePopT / scorePopDuration) }
 
+    /// The HUD score, counting up toward the real total.
+    var hudScore: Int { Int(displayScore.rounded()) }
+    /// A brief scale punch on the score the moment points land (1 → ~1.28 → 1).
+    var scoreBumpScale: Double {
+        guard scoreBumpT < scoreBumpDur else { return 1 }
+        return 1 + 0.28 * sin(scoreBumpT / scoreBumpDur * .pi)
+    }
+
+    /// How far into night we are (0 day … 1 deep night) — matches the visual GameArt.nightAmount.
+    /// Drives the night fish bias in rollFish (the night leans toward bigger / deep fish).
+    var nightLevel: Double { max(0, min(1, (timeOfDay - 0.6) / 0.4)) }
+
     /// How far the gull is across its flyover (0…1) — read by the art.
     var birdProgress: Double { min(1, birdT / birdDuration) }
 
@@ -463,7 +478,7 @@ final class GameModel: ObservableObject {
 
     private func resetState() {
         phase = .launching
-        boatX = 0.5; boatTargetX = 0.5; scroll = 0; score = 0; elapsed = 0
+        boatX = 0.5; boatTargetX = 0.5; scroll = 0; score = 0; displayScore = 0; scoreBumpT = 1; elapsed = 0
         rocks = []; hints = []; leaps = []
         leapSpawn = Double.random(in: 3...7)
         hooked = nil; reelProgress = 0; marker = 0.5; zoneCenter = 0.5
@@ -683,6 +698,11 @@ final class GameModel: ObservableObject {
         updateFeathers(dt)                                                    // knocked-loose feathers settle & fade
         if scorePopT < scorePopDuration { scorePopT += dt }                   // the floating "+points" rises & fades
         if harpoonHitT < 0.35 { harpoonHitT += dt }                           // the harpoon hit-burst fades
+        if scoreBumpT < scoreBumpDur { scoreBumpT += dt }                     // the score's scale-punch settles
+        if displayScore != Double(score) {                                    // HUD score counts up toward the real total
+            displayScore += (Double(score) - displayScore) * 0.28
+            if abs(Double(score) - displayScore) < 0.5 { displayScore = Double(score) }
+        }
 
         // Ease world speed: full while boating, a slow drift while aiming, a calm drift behind the win card.
         let targetFactor = (phase == .casting) ? castScrollSlow : (phase == .gameOver ? 0.45 : 1.0)
@@ -954,7 +974,7 @@ final class GameModel: ObservableObject {
     }
 
     private func loseSleigh(_ reason: String) {
-        streak = 0; comboMult = 1
+        streak = 0; comboMult = 1                     // a snapped tow loses the fish — the combo resets
         levelLosses += 1
         showFlash(reason)
         haptics.play(.miss)
@@ -1194,7 +1214,11 @@ final class GameModel: ObservableObject {
     /// Deep water leans toward the big, valuable fish; shallow toward the small ones.
     /// The exact odds come from the level's fish table.
     private func rollFish(deep: Bool) -> FishKind {
-        config.fish.roll(deep: deep, Double.random(in: 0...1))
+        let n = nightLevel
+        // The night shift leans toward trophies: a chance to draw on the deep (big-fish) table even on a
+        // shallow cast, plus a bias toward the larger end of whichever table.
+        let useDeep = deep || (n > 0.15 && Double.random(in: 0...1) < n * 0.4)
+        return config.fish.roll(deep: useDeep, Double.random(in: 0...1), bigBias: n * 1.1)
     }
 
     private func land() {
@@ -1245,7 +1269,9 @@ final class GameModel: ObservableObject {
 
     /// Add to the run score and to the lifetime tally (which drives boat unlocks).
     private func award(_ pts: Int) {
+        guard pts != 0 else { return }      // a 0-point boot shouldn't bump the counter
         score += pts
+        scoreBumpT = 0                       // kick the scale punch
         LocalStore.addScore(pts)
     }
 
@@ -1288,8 +1314,12 @@ final class GameModel: ObservableObject {
     }
 
     private func lose(_ reason: String) {
-        if hookedSpecial != .mine { streak = 0; comboMult = 1 }   // a whiff or lost fish breaks the streak (a mine bail doesn't)
-        if phase == .reeling && hookedSpecial == nil { levelLosses += 1 }   // a real fish lost on the line
+        // Losing a real fish on the line breaks the streak. A boot, a bailed mine, and an empty cast
+        // (no fish was hooked at all) leave the combo untouched.
+        if phase == .reeling && hookedSpecial == nil {
+            levelLosses += 1                                        // failed a reel
+            if hooked != .boot { streak = 0; comboMult = 1 }       // a lost fish resets the combo
+        }
         showFlash(hookedSpecial == .mine ? "Phew — let it go!" : reason)   // bailing a mine is the smart play
         haptics.play(.miss)
         if phase == .reeling {       // we had something on — play the transition out
