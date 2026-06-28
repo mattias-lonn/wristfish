@@ -21,6 +21,16 @@ struct GameCanvas: View {
             // Soft cloud shadows drift across the surface, under everything else.
             GameArt.drawCloudShadows(ctx, size, scroll: model.scroll)
 
+            // The kraken darkens the deep and looms behind the boat.
+            if model.phase == .kraken {
+                GameArt.drawKrakenMurk(ctx, size, t: model.elapsed, emerge: model.krakenEmerge)
+            }
+
+            // The Boot Beast looms behind the boat.
+            if model.phase == .bootBeast {
+                GameArt.drawBootBeast(ctx, size, t: model.elapsed, emerge: model.bootBeastEmerge)
+            }
+
             if model.phase == .launching {
                 GameArt.drawHarbor(ctx, size, offset: model.harborOffset)
             }
@@ -67,6 +77,13 @@ struct GameCanvas: View {
                 }
             }
 
+            // The towing fish + taut line during a sleigh ride (drawn under the boat).
+            if model.phase == .sleighRide {
+                GameArt.drawSleigh(ctx, size, fishX: model.towFishX, fishY: model.towFishY,
+                                   boatX: model.boatX, boatY: model.boatY,
+                                   strain: model.sleighStrain, t: model.elapsed)
+            }
+
             GameArt.drawBoat(ctx, size, x: model.boatX, boatY: model.boatY,
                              wake: model.wakeTrail, t: model.elapsed, speed: model.boatSpeed,
                              timeOfDay: model.timeOfDay)
@@ -81,6 +98,21 @@ struct GameCanvas: View {
 
             // Feathers knocked loose by a clipped gull, fluttering down over the water.
             for f in model.feathers { GameArt.drawFeather(ctx, size, f, dur: model.featherDuration) }
+
+            // Kraken tentacles slam over the top of the boat; your harpoons fly up at it.
+            if model.phase == .kraken {
+                GameArt.drawKrakenStrikes(ctx, size, tentacles: model.tentacles)
+                GameArt.drawHarpoons(ctx, size, harpoons: model.harpoons)
+                if model.harpoonHitActive {
+                    GameArt.drawHarpoonImpact(ctx, size, x: model.harpoonHitX, y: model.harpoonHitY,
+                                              progress: model.harpoonHitT / 0.35)
+                }
+            }
+
+            // Boots the beast lobs at you, over the top of the boat.
+            if model.phase == .bootBeast {
+                GameArt.drawBootThrows(ctx, size, throws: model.bootThrows)
+            }
 
             if model.phase == .crashing {
                 if model.crashIsMine {

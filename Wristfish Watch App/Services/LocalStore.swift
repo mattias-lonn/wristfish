@@ -35,7 +35,14 @@ enum LocalStore {
     }
 
     /// Level 1 is always open; later levels unlock once the previous one is cleared.
-    static func isUnlocked(level id: Int) -> Bool { id <= 1 || stars(level: id - 1) > 0 }
+    /// In dev builds everything is unlocked so any level can be tested.
+    static func isUnlocked(level id: Int) -> Bool {
+        #if DEBUG
+        return true
+        #else
+        return id <= 1 || stars(level: id - 1) > 0
+        #endif
+    }
 
     /// Total stars across the campaign (for the menu).
     static func totalStars() -> Int { starsMap().values.reduce(0, +) }

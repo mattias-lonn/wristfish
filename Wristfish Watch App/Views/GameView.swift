@@ -30,7 +30,7 @@ struct GameView: View {
     /// Whether the level-goal banner should show (during active play, not on the end card).
     private var showObjective: Bool {
         switch model.phase {
-        case .boating, .casting, .reeling, .hooking, .surfacing, .landed: return true
+        case .boating, .casting, .reeling, .hooking, .surfacing, .landed, .sleighRide: return true
         default: return false
         }
     }
@@ -152,7 +152,7 @@ struct GameView: View {
                 .padding(.horizontal, 14)
             }
 
-            if !model.flash.isEmpty {
+            if !model.flash.isEmpty && model.phase != .kraken && model.phase != .bootBeast {   // don't cover the monster
                 Text(model.flash)
                     .font(.caption.bold())
                     .foregroundStyle(Sea.coral)
@@ -190,6 +190,34 @@ struct GameView: View {
                 meter(model.castReachFraction, model.castLocked ? Sea.gold : Sea.blue)
             }
             .padding(.horizontal, 14).padding(.bottom, 6)
+
+        case .sleighRide:
+            VStack(spacing: 4) {
+                pill(model.sleighStrain > 0.6 ? "Ease off!" : "Stay on its tail!",
+                     model.sleighStrain > 0.6 ? .red : Sea.teal)
+                meter(model.sleighCatchProgress, Sea.gold)                                   // fish tiring
+                meter(model.sleighStrain, model.sleighStrain > 0.6 ? .red : Sea.coral)       // line strain
+            }
+            .padding(.horizontal, 14).padding(.bottom, 6)
+
+        case .kraken:
+            VStack(spacing: 4) {
+                if model.krakenProgress <= 0 {
+                    pill("Brace yourself…", Sea.coral)               // a hint while it rises
+                } else {
+                    if model.krakenJustStarted { pill("Tap to harpoon!", Sea.teal) }
+                    meter(model.krakenDamage, Sea.gold)              // drive-it-off progress
+                }
+            }
+            .padding(.horizontal, 28).padding(.bottom, 5)
+
+        case .bootBeast:
+            if model.bootBeastRising {
+                pill("The Boot Beast!", Sea.coral).padding(.bottom, 6)   // names the beast while it rises
+            } else {
+                meter(model.bootBeastProgress, Sea.gold)                 // slim bar — clear of the dodge zone
+                    .padding(.horizontal, 30).padding(.bottom, 5)
+            }
 
         case .boating:
             if model.targetAhead {

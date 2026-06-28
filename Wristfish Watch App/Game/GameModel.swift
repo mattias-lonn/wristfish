@@ -21,7 +21,7 @@ final class GameModel: ObservableObject {
     private let castScrollSlow = 0.22   // world keeps drifting at this fraction of speed while aiming
     private let scrollEase     = 0.10   // how smoothly the world speed eases in/out (the debounce)
 
-    private let steerGain   = 0.022     // Crown → boat target sideways speed
+    private let steerGain   = 0.017     // Crown → boat target sideways speed (gentler)
     private let boatSmooth  = 0.22      // how quickly the boat eases toward your steer (smoothing)
     private let wakeTrailLen = 14       // how many recent positions the wake trail remembers
     private let edge        = 0.10      // boat can't go past these x margins
@@ -44,9 +44,54 @@ final class GameModel: ObservableObject {
     private let zoneHalf   = 0.15       // half-height of the safe zone (bigger = easier)
     private let zoneAmp    = 0.26       // how far from centre the zone drifts
     private let zoneSpeed  = 1.0        // zone drift speed (rad/s) — slow & steady
-    private let markerGain = 0.022      // Crown → marker speed
+    private let markerGain = 0.017      // Crown → marker speed (gentler)
     private let fillRate   = 0.50       // catch progress gained per second while in the zone
     private let drainRate  = 0.28       // catch progress lost per second while outside
+
+    // Sleigh ride — a hooked monster tows the boat: steer to stay on its tail and wear it down.
+    private let sleighSpeedMul   = 2.1     // world rushes past while you're being towed
+    private let sleighFishY      = 0.30    // the towed fish rides up here
+    private let sleighWeaveSpeed = 1.6     // how fast it cuts side to side
+    private let sleighWeaveAmp   = 0.30    // how wide it swings
+    private let sleighAlignTol   = 0.13    // within this x-gap you're "on its tail"
+    private let sleighDrainRate  = 0.16    // fish stamina lost per second while on its tail
+    private let sleighRegenRate  = 0.05    // stamina it recovers while you're off its line
+    private let sleighStrainRate = 1.3     // line strain gained per second per unit of misalignment
+    private let sleighStrainFall = 0.8     // strain shed per second while on its tail
+    private let sleighHaulDrain  = 0.07    // a tap yanks this much stamina…
+    private let sleighHaulStrain = 0.12    // …at the cost of this much strain
+    private let sleighBonus      = 1.6     // a towed catch is worth this much more — it's a fight
+
+    // The Kraken — a rare set-piece: a monster surfaces and you dodge tentacle slams.
+    private let krakenIntro    = 2.6       // a build-up (darkening, bubbles, the body rising) before any strikes
+    private let krakenDuration = 14.0      // how long you must survive once it's fully up
+    private let krakenHitR     = 0.10      // how close a slam must land to grab you
+    let krakenTeleT    = 1.1               // a strike telegraphs for this long (earlier warning)…
+    let krakenStrikeT  = 0.35             // …then slams (the dangerous window)…
+    let krakenRecedeT  = 0.5              // …then sinks back
+    private let krakenBonus    = 150       // points for surviving the whole thing (mostly dodging)
+    private let krakenDriveOffBonus = 400  // extra for driving it off — the big, skill-gated prize
+    // Harpooning the kraken — steer under a target and tap to fire straight up.
+    private let harpoonSpeed   = 1.5       // how fast a harpoon flies up (normalized / s)
+    private let harpoonReload  = 0.45      // min time between throws
+    private let harpoonReachY  = 0.24      // a harpoon connects once it reaches this y (the body band)
+    private let harpoonEyeR    = 0.055     // x-tolerance for an eye hit
+    private let harpoonBodyHalf = 0.24     // x half-width of the body for a glancing hit
+    private let harpoonEyeDmg  = 0.18      // resolve drained by an eye hit…
+    private let harpoonBodyDmg = 0.06      // …and by a body hit
+    private let harpoonEyePts  = 25        // points for an eye hit…
+    private let harpoonBodyPts = 10        // …and a body hit
+
+    // The Boot Beast — every couple of boots, a goofy boot-monster pops up and pelts you with boots.
+    private let bootBeastEvery    = 2      // summon it every N boots landed this trip
+    private let bootBeastIntro    = 1.8    // it rises for this long (a kraken-style build-up) before lobbing boots
+    private let bootBeastDuration = 6.0    // how long the boot barrage lasts
+    let bootThrowTele             = 0.6    // a throw telegraphs (warning ring) for this long…
+    let bootThrowDrop             = 0.4    // …then the boot falls & lands
+    private let bootThrowHitR     = 0.10   // how close a landing boot must be to bonk you
+    private let bootDodgePts      = 25     // each dodged boot adds this to the payout…
+    private let bootHitPenalty    = 20     // …each bonk takes this off
+    private let bootBeastBase     = 80     // the payout starts here
 
     // A bigger fish that rarely comes to eat the one on your hook.
     private let predatorChance     = 0.16   // chance a predator targets a small/mid catch — rare
@@ -83,6 +128,52 @@ final class GameModel: ObservableObject {
     private(set) var birdXOffset = 0.0         // horizontal shift after the gull is knocked off course
     private(set) var birdHit = false           // your cast clipped it this pass (once per pass)
     private(set) var feathers: [Feather] = []  // feathers fluttering down from a clipped gull
+
+    // Sleigh-ride state (read by the art & HUD).
+    private(set) var sleighStamina = 1.0       // 1 → 0; the fish tires, you land it at 0
+    private(set) var sleighStrain  = 0.0       // 0 → 1; the line snaps at 1
+    private(set) var towFishX = 0.5            // the towing fish's position…
+    private(set) var towFishY = 0.30           // …ahead of the boat
+    private var sleighClock = 0.0
+    private var landingViaSleigh = false        // the catch being landed came in on a tow
+    /// Catch progress for the HUD while being towed (fish worn down so far).
+    var sleighCatchProgress: Double { 1 - sleighStamina }
+
+    // Kraken state (read by the art & HUD).
+    private(set) var tentacles: [Tentacle] = []
+    private(set) var krakenT = 0.0
+    private var krakenNextStrike = 0.0
+    private var krakenEmerged = false
+    private var krakenSpawn = Double.random(in: 55...95)
+    private(set) var krakenHP = 1.0            // its resolve; drive it to 0 with harpoons to scare it off
+    private(set) var harpoons: [Harpoon] = []
+    private var harpoonCool = 0.0
+    private(set) var harpoonHitX = 0.5         // last impact point + clock, for the hit burst
+    private(set) var harpoonHitY = 0.0
+    private(set) var harpoonHitT = 99.0
+    /// 0→1 as the monster rises during the intro (drives the build-up visuals).
+    var krakenEmerge: Double { min(1, krakenT / krakenIntro) }
+    /// Combat progress for the survive meter — stays 0 through the intro.
+    var krakenProgress: Double { min(1, max(0, (krakenT - krakenIntro) / krakenDuration)) }
+    /// How worn down the kraken is (drives the HUD meter): 0 fresh → 1 driven off.
+    var krakenDamage: Double { 1 - krakenHP }
+    /// Briefly true at the start of combat (for the "tap to harpoon" hint).
+    var krakenJustStarted: Bool { krakenProgress > 0 && krakenProgress < 0.16 }
+    var harpoonHitActive: Bool { harpoonHitT < 0.35 }
+
+    // Boot Beast state.
+    private(set) var bootsThisTrip = 0
+    private var pendingBootBeast = false
+    private(set) var bootBeastT = 0.0
+    private(set) var bootThrows: [BootThrow] = []
+    private var bootThrowNext = 0.0
+    private var bootBeastRevealed = false
+    private(set) var bootBeastBonus = 0
+    /// 0→1 as the boot beast rises (for the build-up visuals).
+    var bootBeastEmerge: Double { min(1, bootBeastT / bootBeastIntro) }
+    var bootBeastRising: Bool { bootBeastT < bootBeastIntro }
+    /// How far through the boot barrage you are (for the slim HUD meter).
+    var bootBeastProgress: Double { min(1, max(0, (bootBeastT - bootBeastIntro) / bootBeastDuration)) }
 
     // Reeling state
     private(set) var hooked: FishKind?
@@ -142,6 +233,7 @@ final class GameModel: ObservableObject {
     private var zonePhase = 0.0                // random starting phase of the zone drift
     private let chestDuration   = 30.0         // double points last this long
     private let pickaxeDuration  = 20.0        // rock-cleaving lasts this long
+    private let rockSmashPts      = 5          // points for cleaving a rock with the pickaxe
     let shatterDuration  = 0.55                // how long a rock-shatter burst plays
     private var mineChance    = 0.05           // chance a hooked catch is a mine…   (per level)
     private var chestChance   = 0.07           // …a chest…                          (per level)
@@ -157,6 +249,7 @@ final class GameModel: ObservableObject {
     private var birdSpeedTarget = 1.0
     private let birdSlowFactor = 0.42          // how far the gull slows when your line is in front of it
     private let birdHitRadius  = 0.065         // how close the hook must pass to clip the gull
+    private let birdHitPts     = 15            // a small reward for the skill shot of clipping a gull
     let featherDuration = 1.3                   // how long a knocked-loose feather lingers
     let leapDuration = 0.85                      // how long a fish's leap lasts
     private var leapSpawn = Double.random(in: 3...7)
@@ -382,6 +475,13 @@ final class GameModel: ObservableObject {
         birdSpawn = Double.random(in: 8...16)
         birdXOffset = 0; birdHit = false; birdSpeed = 1; birdSpeedTarget = 1; feathers = []
         worldDist = 0; scriptIndex = 0
+        sleighStamina = 1; sleighStrain = 0; sleighClock = 0; towFishX = 0.5; towFishY = sleighFishY
+        landingViaSleigh = false
+        tentacles = []; krakenT = 0; krakenNextStrike = 0; krakenEmerged = false
+        krakenHP = 1; harpoons = []; harpoonCool = 0; harpoonHitT = 99
+        krakenSpawn = Double.random(in: 55...95)
+        bootsThisTrip = 0; pendingBootBeast = false; bootBeastT = 0; bootBeastRevealed = false
+        bootThrows = []; bootThrowNext = 0; bootBeastBonus = 0
         fishCount = 0; caught = [:]; levelTime = 0; levelLosses = 0
         levelHadPerfect = false; bestComboReached = 0; levelWon = false; levelStars = 0
         pendingWin = false; autoSail = false
@@ -482,7 +582,9 @@ final class GameModel: ObservableObject {
         birdDir = -birdDir
         birdXOffset = curBaseX - ((0.5 - 0.65 * birdDir) + (1.20 * birdDir) * p)
         spawnFeathers(at: bp)
-        showFlash("Bonk!")
+        let pts = birdHitPts * scoreMultiplier
+        score += pts
+        showFlash("Bonk! +\(pts)")
         haptics.play(.tug)
     }
 
@@ -525,7 +627,7 @@ final class GameModel: ObservableObject {
 
     func crown(delta: Double) {
         switch phase {
-        case .boating:
+        case .boating, .sleighRide, .kraken, .bootBeast:
             boatTargetX = min(max(boatTargetX + delta * steerGain, edge), 1 - edge)
         case .reeling:
             marker = min(max(marker + delta * markerGain, 0), 1)   // move your gauge marker
@@ -536,11 +638,28 @@ final class GameModel: ObservableObject {
 
     func tap() {
         switch phase {
-        case .boating: startAim()            // first tap — the line starts going out
-        case .casting: dropCast()            // second tap — drop it at the reached distance
-        case .landed:  phase = .boating      // continue the trip
-        default:       break                 // reeling / gameOver: ignore
+        case .boating:    startAim()         // first tap — the line starts going out
+        case .casting:    dropCast()         // second tap — drop it at the reached distance
+        case .sleighRide: sleighHaul()       // yank to tire it faster — but it strains the line
+        case .kraken:     fireHarpoon()      // throw a harpoon straight up at the monster
+        case .landed:     phase = .boating   // continue the trip
+        default:          break              // reeling / gameOver: ignore
         }
+    }
+
+    /// Launch a harpoon up from the boat (only once the kraken is up and the line has reloaded).
+    private func fireHarpoon() {
+        guard krakenEmerged, harpoonCool <= 0 else { return }
+        harpoons.append(Harpoon(x: boatX, y: boatY - 0.06))
+        harpoonCool = harpoonReload
+        haptics.play(.cast)
+    }
+
+    /// A desperate yank during the tow: tires the fish faster, but spikes line strain.
+    private func sleighHaul() {
+        sleighStamina = max(0, sleighStamina - sleighHaulDrain)
+        sleighStrain = min(1, sleighStrain + sleighHaulStrain)
+        haptics.play(.tug)
     }
 
     /// Called by the result card's Play-again / Retry button — replays the current level.
@@ -557,13 +676,15 @@ final class GameModel: ObservableObject {
         if rockBreakT > 0 { rockBreakT = max(0, rockBreakT - dt) }
         updateFeathers(dt)                                                    // knocked-loose feathers settle & fade
         if scorePopT < scorePopDuration { scorePopT += dt }                   // the floating "+points" rises & fades
+        if harpoonHitT < 0.35 { harpoonHitT += dt }                           // the harpoon hit-burst fades
 
         // Ease world speed: full while boating, a slow drift while aiming, a calm drift behind the win card.
         let targetFactor = (phase == .casting) ? castScrollSlow : (phase == .gameOver ? 0.45 : 1.0)
         scrollFactor += (targetFactor - scrollFactor) * scrollEase
 
         // Record the boat's path for the wake (while it's on the water — including the showcase sail).
-        if phase == .launching || phase == .boating || phase == .casting || (phase == .gameOver && autoSail) {
+        if phase == .launching || phase == .boating || phase == .casting || phase == .sleighRide
+            || phase == .kraken || phase == .bootBeast || (phase == .gameOver && autoSail) {
             wakeTrail.insert(boatX, at: 0)
             if wakeTrail.count > wakeTrailLen { wakeTrail.removeLast() }
         }
@@ -574,6 +695,9 @@ final class GameModel: ObservableObject {
         case .casting:   tickCasting(dt)
         case .hooking:   tickHooking(dt)
         case .reeling:   tickReeling(dt)
+        case .sleighRide: tickSleigh(dt)
+        case .kraken:    tickKraken(dt)
+        case .bootBeast: tickBootBeast(dt)
         case .surfacing: tickSurfacing(dt)
         case .crashing:  tickCrash(dt)
         case .landed:    tickLanded(dt)
@@ -585,6 +709,7 @@ final class GameModel: ObservableObject {
         if pendingWin && !levelWon && (phase == .boating || phase == .casting || phase == .landed) {
             winLevel()
         }
+        if pendingBootBeast && phase == .boating { startBootBeast() }   // a couple of boots → the beast
         objectWillChange.send()
     }
 
@@ -611,6 +736,11 @@ final class GameModel: ObservableObject {
             leapSpawn = Double.random(in: 4...8)
         }
 
+        if config.kraken {
+            krakenSpawn -= dt
+            if krakenSpawn <= 0 { startKraken(); return }
+        }
+
         if checkCollision() { return }
     }
 
@@ -622,6 +752,7 @@ final class GameModel: ObservableObject {
         if rockBreakT > 0 && hit.kind == .rock {
             shatters.append(Shatter(x: hit.x, y: hit.y, r: hit.r, seed: hit.seed))
             rocks.removeAll { $0.id == hit.id }
+            score += rockSmashPts * scoreMultiplier        // cleaving a rock pays a little
             haptics.play(.tug)
             return false
         }
@@ -630,8 +761,9 @@ final class GameModel: ObservableObject {
     }
 
     /// Scrolls the water and drifts the rocks/ripples by the current (eased) world speed.
-    private func advanceWorld(_ dt: Double) {
-        let speed = baseScroll * (1 + scrollRamp * ramp) * scrollFactor
+    /// `speedMul` lets the sleigh ride rush the world past faster.
+    private func advanceWorld(_ dt: Double, speedMul: Double = 1) {
+        let speed = baseScroll * (1 + scrollRamp * ramp) * scrollFactor * speedMul
         scroll += speed * dt
         worldDist += speed * dt
         processScript()
@@ -749,18 +881,244 @@ final class GameModel: ObservableObject {
         if Double.random(in: 0...1) < predatorSnapChance {
             lose("It bit through the line!")
         } else {
-            // The big fish is now on your hook — bigger points, much harder to balance.
-            hooked = .tuna
-            hardFish = true
-            reelProgress = 0.2
-            marker = 0.5
-            zonePhase = Double.random(in: 0...(2 * .pi))
-            reelClock = 0
-            wasInZone = false
-            reelOutTime = 0
-            showFlash("It took the bait!")
-            haptics.play(.bite)
+            // The big fish is now on your hook — and it's strong enough to tow you. Hang on!
+            startSleighRide(.tuna)
         }
+    }
+
+    // MARK: Sleigh ride -----------------------------------------------------
+
+    /// A big fish takes off, towing the boat. Steer to stay on its tail and wear it down.
+    private func startSleighRide(_ kind: FishKind) {
+        hooked = kind
+        hookedSpecial = nil
+        hardFish = false
+        predatorActive = false; predatorPending = false; predatorT = 0
+        sleighStamina = 1.0
+        sleighStrain = 0.0
+        sleighClock = 0
+        towFishX = boatX
+        towFishY = sleighFishY
+        phase = .sleighRide
+        showFlash("HANG ON!")
+        haptics.play(.bite)
+    }
+
+    private func tickSleigh(_ dt: Double) {
+        sleighClock += dt
+        boatX += (boatTargetX - boatX) * boatSmooth            // you still steer the boat
+        boatSpeed = 1
+        advanceWorld(dt, speedMul: sleighSpeedMul)             // the world rushes past
+
+        if config.rockSpawn != nil {                           // rocks to dodge while you're dragged
+            rockSpawn -= dt
+            if rockSpawn <= 0 { spawnRock(); rockSpawn = Double.random(in: rockGap()) }
+        }
+
+        // The fish cuts side to side ahead of you (two sines so it's not a clean metronome).
+        let target = 0.5 + sin(sleighClock * sleighWeaveSpeed) * sleighWeaveAmp
+                         + sin(sleighClock * 0.7 + 1.3) * (sleighWeaveAmp * 0.35)
+        towFishX += (min(max(target, edge), 1 - edge) - towFishX) * 0.10
+        towFishY = sleighFishY
+
+        // On its tail → drain its stamina & ease the line; off its line → it recovers & strain builds.
+        let gap = abs(boatX - towFishX)
+        if gap <= sleighAlignTol {
+            sleighStamina = max(0, sleighStamina - sleighDrainRate * dt)
+            sleighStrain  = max(0, sleighStrain  - sleighStrainFall * dt)
+        } else {
+            sleighStamina = min(1, sleighStamina + sleighRegenRate * dt)
+            sleighStrain  = min(1, sleighStrain  + sleighStrainRate * (gap - sleighAlignTol) * dt)
+        }
+
+        // A rock at this speed tears the hook free — you lose the fish, but the trip sails on.
+        if let hit = rocks.first(where: { collides($0) }) {
+            if hit.kind == .rock {
+                shatters.append(Shatter(x: hit.x, y: hit.y, r: hit.r, seed: hit.seed))   // it bursts apart
+            }
+            rocks.removeAll { $0.id == hit.id }
+            loseSleigh("It pulled free!")
+            return
+        }
+        if sleighStrain >= 1 { loseSleigh("The line snapped!"); return }
+        if sleighStamina <= 0 { landSleigh(); return }
+    }
+
+    private func loseSleigh(_ reason: String) {
+        streak = 0; comboMult = 1
+        levelLosses += 1
+        showFlash(reason)
+        haptics.play(.miss)
+        hooked = nil
+        phase = .boating
+    }
+
+    private func landSleigh() {
+        reelProgress = 1                 // it's at the surface
+        reelOutTime = perfectTol + 1     // a tow isn't a "perfect" balance reel
+        landingViaSleigh = true          // …but it earns the tow bonus
+        land()                           // score it, build combo, surface → landed
+    }
+
+    // MARK: The Kraken ------------------------------------------------------
+
+    /// A monster begins to surface. The field clears gently (no new spawns; old rocks drift off) while
+    /// the deep darkens and the body rises — then the tentacles come.
+    private func startKraken() {
+        phase = .kraken
+        krakenT = 0
+        tentacles = []
+        krakenEmerged = false
+        krakenHP = 1; harpoons = []; harpoonCool = 0
+        hints.removeAll(); leaps.removeAll()    // ripples fade; rocks just drift off during the build-up
+        birdActive = false                      // no gull frozen mid-flight during the encounter
+        haptics.play(.tug)                      // a distant rumble as it stirs below
+    }
+
+    private func tickKraken(_ dt: Double) {
+        krakenT += dt
+        boatX += (boatTargetX - boatX) * boatSmooth
+        boatSpeed = 1
+        advanceWorld(dt, speedMul: 0.4)              // slow, ominous drift (no spawns)
+
+        // Build-up: the monster is still rising — no strikes yet, just the dread.
+        guard krakenT >= krakenIntro else { return }
+        if !krakenEmerged {                          // the moment it breaks the surface
+            krakenEmerged = true
+            krakenNextStrike = 0.5
+            haptics.play(.crash)
+        }
+
+        for i in tentacles.indices { tentacles[i].age += dt }
+        tentacles.removeAll { $0.age >= krakenTeleT + krakenStrikeT + krakenRecedeT }
+
+        krakenNextStrike -= dt
+        if krakenNextStrike <= 0 {
+            spawnTentacle()
+            let prog = krakenProgress                 // it rages faster as it goes
+            krakenNextStrike = (1.6 - 0.85 * prog) * Double.random(in: 0.85...1.15)
+        }
+
+        // Harpoons fly up; resolve any that reach the body band.
+        if harpoonCool > 0 { harpoonCool -= dt }
+        for i in harpoons.indices { harpoons[i].y -= harpoonSpeed * dt }
+        harpoons.removeAll { resolveHarpoon($0) || $0.y < -0.05 }
+        if krakenHP <= 0 { endKraken(drivenOff: true); return }
+
+        // Grabbed if a tentacle slams where the boat is, during its strike window.
+        for tnt in tentacles where tnt.age >= krakenTeleT && tnt.age < krakenTeleT + krakenStrikeT {
+            if abs(boatX - tnt.x) < krakenHitR {
+                showFlash("GRABBED!")
+                crash()
+                return
+            }
+        }
+
+        if krakenT >= krakenIntro + krakenDuration { endKraken(drivenOff: false) }
+    }
+
+    /// True (consume the harpoon) if it lands on the body or an eye; applies damage & points.
+    private func resolveHarpoon(_ h: Harpoon) -> Bool {
+        guard h.y <= harpoonReachY else { return false }
+        let cx = 0.5
+        let dEye = min(abs(h.x - (cx - 0.088)), abs(h.x - (cx + 0.088)))
+        if dEye < harpoonEyeR {
+            krakenHP = max(0, krakenHP - harpoonEyeDmg)
+            score += harpoonEyePts * scoreMultiplier
+            harpoonHitX = h.x; harpoonHitY = h.y; harpoonHitT = 0
+            haptics.play(.tug)
+            return true
+        } else if abs(h.x - cx) < harpoonBodyHalf {
+            krakenHP = max(0, krakenHP - harpoonBodyDmg)
+            score += harpoonBodyPts * scoreMultiplier
+            harpoonHitX = h.x; harpoonHitY = h.y; harpoonHitT = 0
+            haptics.play(.reel)
+            return true
+        }
+        return false       // flew past the body — let it sail off the top
+    }
+
+    private func spawnTentacle() {
+        // Most slams aim near you (forcing a dodge); some land wide.
+        let aimed = Double.random(in: 0...1) < 0.6
+        let x = aimed ? boatX + Double.random(in: -0.18...0.18) : Double.random(in: 0.12...0.88)
+        tentacles.append(Tentacle(x: min(0.9, max(0.1, x)), seed: Int.random(in: 0..<100_000)))
+    }
+
+    private func endKraken(drivenOff: Bool) {
+        tentacles = []; harpoons = []
+        let bonus = (krakenBonus + (drivenOff ? krakenDriveOffBonus : 0)) * scoreMultiplier
+        score += bonus
+        triggerScorePop(bonus, mult: 1, perfect: false)
+        showFlash(drivenOff ? "DROVE IT OFF!" : "SURVIVED!")
+        haptics.play(.catchBig)
+        checkObjective()
+        phase = .boating
+        krakenSpawn = Double.random(in: 90...150)        // long cooldown before it returns
+    }
+
+    // MARK: The Boot Beast --------------------------------------------------
+
+    /// A goofy monster made of boots pops up and lobs boots at you — dodge them to build a payout.
+    private func startBootBeast() {
+        phase = .bootBeast
+        pendingBootBeast = false
+        bootBeastT = 0
+        bootThrows = []
+        bootThrowNext = bootBeastIntro + 0.3
+        bootBeastBonus = bootBeastBase
+        rocks.removeAll(); hints.removeAll(); leaps.removeAll()
+        birdActive = false
+        bootBeastRevealed = false
+        haptics.play(.tug)                                   // a rumble as it stirs (like the kraken)
+    }
+
+    private func tickBootBeast(_ dt: Double) {
+        bootBeastT += dt
+        boatX += (boatTargetX - boatX) * boatSmooth
+        boatSpeed = 1
+        advanceWorld(dt, speedMul: 0.4)
+
+        guard bootBeastT >= bootBeastIntro else { return }   // still rising
+        if !bootBeastRevealed { bootBeastRevealed = true; haptics.play(.bite) }   // it breaks the surface
+
+        // Lob boots, faster as it goes.
+        bootThrowNext -= dt
+        if bootThrowNext <= 0 {
+            let aimed = Double.random(in: 0...1) < 0.6
+            let x = aimed ? boatX + Double.random(in: -0.18...0.18) : Double.random(in: 0.12...0.88)
+            bootThrows.append(BootThrow(x: min(0.9, max(0.1, x))))
+            let prog = min(1, (bootBeastT - bootBeastIntro) / bootBeastDuration)
+            bootThrowNext = (0.9 - 0.35 * prog) * Double.random(in: 0.85...1.15)
+        }
+
+        // Resolve each boot as it lands: a near miss pays, a bonk costs (no crash — it's all in fun).
+        let resolveAt = bootThrowTele + bootThrowDrop * 0.65
+        for i in bootThrows.indices where !bootThrows[i].resolved && bootThrows[i].age + dt >= resolveAt {
+            bootThrows[i].resolved = true
+            if abs(boatX - bootThrows[i].x) < bootThrowHitR {
+                bootBeastBonus = max(0, bootBeastBonus - bootHitPenalty)
+                haptics.play(.miss)
+            } else {
+                bootBeastBonus += bootDodgePts
+                haptics.play(.reel)
+            }
+        }
+        for i in bootThrows.indices { bootThrows[i].age += dt }
+        bootThrows.removeAll { $0.age >= bootThrowTele + bootThrowDrop + 0.15 }
+
+        if bootBeastT >= bootBeastIntro + bootBeastDuration { endBootBeast() }
+    }
+
+    private func endBootBeast() {
+        bootThrows = []
+        let bonus = bootBeastBonus * scoreMultiplier
+        score += bonus
+        triggerScorePop(bonus, mult: 1, perfect: false)
+        showFlash("BEAST BUSTED!")
+        haptics.play(.catchBig)
+        checkObjective()
+        phase = .boating
     }
 
     // MARK: Casting / reeling resolution -----------------------------------
@@ -798,6 +1156,12 @@ final class GameModel: ObservableObject {
         hookedSpecial = special
         hooked = special == nil ? rollFish(deep: deep) : nil
 
+        // A tuna is strong enough to tow the boat — that hooks into the sleigh ride, not the gauge.
+        if special == nil, hooked == .tuna {
+            startSleighRide(.tuna)
+            return
+        }
+
         reelProgress = 0.25
         marker = 0.5
         zonePhase = Double.random(in: 0...(2 * .pi))   // zone starts at a random spot
@@ -830,11 +1194,17 @@ final class GameModel: ObservableObject {
         // A scoring fish extends the streak; an old boot lands but neither builds nor breaks it.
         let scoring = kind.points > 0
         if scoring { streak += 1; comboMult = min(maxCombo, streak) }
+        if kind == .boot {                                   // boots pile up → summon the Boot Beast
+            bootsThisTrip += 1
+            if bootsThisTrip % bootBeastEvery == 0 { pendingBootBeast = true }
+        }
         let perfect = scoring && reelOutTime <= perfectTol      // never (really) left the zone
 
         let mult = scoreMultiplier * (scoring ? comboMult : 1)  // chest × combo streak
         var pts = kind.points * mult
         if perfect { pts = Int((Double(pts) * perfectBonus).rounded()) }
+        if landingViaSleigh { pts = Int((Double(pts) * sleighBonus).rounded()) }   // a hard-won tow pays extra
+        landingViaSleigh = false
         score += pts
 
         if scoring {

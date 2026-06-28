@@ -15,6 +15,9 @@ enum Phase {
     case casting     // aiming — the line is extending; tap again to drop it
     case hooking     // brief "Fish on!" flash between the cast and the reel
     case reeling     // fish on the hook — work the balance gauge!
+    case sleighRide  // a big fish is towing the boat — steer, dodge, and wear it down
+    case kraken      // a sea monster surfaced — dodge its tentacle strikes and survive
+    case bootBeast   // a goofy boot-monster popped up — dodge the boots it lobs at you
     case surfacing   // catch/loss transition out of the reel
     case landed      // showing the catch
     case crashing    // hit a rock — the splash effect is playing
@@ -43,9 +46,9 @@ enum FishKind: CaseIterable {
         switch self {
         case .herring:  return 10
         case .mackerel: return 25
-        case .cod:      return 45
-        case .salmon:   return 90
-        case .tuna:     return 175
+        case .cod:      return 50
+        case .salmon:   return 100
+        case .tuna:     return 200
         case .boot:     return 0
         }
     }
@@ -132,6 +135,27 @@ struct Feather: Identifiable {
     var age: Double = 0
 }
 
+/// A boot the Boot Beast lobs at you: telegraphs, then drops at `x`. Driven by `age`.
+struct BootThrow {
+    var x: Double
+    var age: Double = 0
+    var resolved: Bool = false      // dodge/hit already counted
+}
+
+/// A harpoon you've thrown straight up at the kraken — flies until it hits or leaves the screen.
+struct Harpoon {
+    var x: Double
+    var y: Double
+}
+
+/// A kraken tentacle strike: telegraphs, slams at `x`, then recedes. Driven entirely by `age`.
+struct Tentacle: Identifiable {
+    let id = UUID()
+    var x: Double
+    var age: Double = 0
+    var seed: Int
+}
+
 /// A fish leaping out of the water — a brief ambient flourish.
 struct Leap: Identifiable {
     let id = UUID()
@@ -184,6 +208,12 @@ struct FishTable {
     static let bluewater = FishTable(
         shallow: [.init(kind: .mackerel, weight: 40), .init(kind: .cod, weight: 40), .init(kind: .salmon, weight: 20)],
         deep:    [.init(kind: .cod, weight: 18), .init(kind: .salmon, weight: 40), .init(kind: .tuna, weight: 42)])
+    /// Freeplay (Open Water): like `standard`, but tuna are scarcer so the tow is a rarer treat.
+    static let openWater = FishTable(
+        shallow: [.init(kind: .boot, weight: 10), .init(kind: .herring, weight: 45),
+                  .init(kind: .mackerel, weight: 33), .init(kind: .cod, weight: 12)],
+        deep:    [.init(kind: .boot, weight: 8), .init(kind: .cod, weight: 35),
+                  .init(kind: .salmon, weight: 45), .init(kind: .tuna, weight: 12)])
 }
 
 /// How often a hooked catch is a special instead of a fish.
@@ -241,6 +271,7 @@ struct LevelConfig {
     let predator: Bool
     let script: [ScriptedSpawn]
     var finishAt: Double? = nil            // world distance to the finish line (for .reachFinish levels)
+    var kraken: Bool = false               // can the kraken surface on this level?
 
     /// The endless score-chase. Renamed "Open Water" in the menu.
     static let freeplay = LevelConfig(
@@ -248,7 +279,7 @@ struct LevelConfig {
         objective: nil, fixedTimeOfDay: nil, dayLength: 150,
         baseScroll: 0.24, scrollRamp: 0.6, rampSeconds: 90,
         rockSpawn: 1.4...2.6, hintSpawn: 1.8...3.0, lethal: true,
-        fish: .standard, specials: .standard, birds: true, predator: true, script: [])
+        fish: .openWater, specials: .standard, birds: true, predator: true, script: [], kraken: true)
 }
 
 // MARK: - Authored patterns + the campaign --------------------------------------
@@ -340,11 +371,11 @@ extension LevelConfig {
             fish: .standard, specials: .standard, birds: true, predator: true, script: []),
 
         // 10 — the finale: everything, at speed, in the dark.
-        LevelConfig(id: 10, title: "Master Angler", subtitle: "Reach 900 points",
-            objective: .score(900), fixedTimeOfDay: 0.90, dayLength: 150,
+        LevelConfig(id: 10, title: "Master Angler", subtitle: "Reach 1000 points",
+            objective: .score(1000), fixedTimeOfDay: 0.90, dayLength: 150,
             baseScroll: 0.30, scrollRamp: 0.7, rampSeconds: 70,
             rockSpawn: 1.5...2.6, hintSpawn: 1.2...2.0, lethal: true,
             fish: .standard, specials: .treasure, birds: true, predator: true,
-            script: slalom(start: 3, gap: 1.6, count: 10)),
+            script: slalom(start: 3, gap: 1.6, count: 10), kraken: true),
     ]
 }

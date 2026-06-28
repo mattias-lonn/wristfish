@@ -792,6 +792,512 @@ enum GameArt {
         g.stroke(shaft, with: .color(quill), lineWidth: max(0.6, L * 0.05))
     }
 
+    // MARK: The Kraken -------------------------------------------------------
+
+    // Tentacle strike lifecycle (mirrors GameModel's krakenTeleT / krakenStrikeT / krakenRecedeT).
+    private static let tentTele = 1.1, tentStrike = 0.35, tentRecede = 0.5
+
+    /// The dark deep + the looming body, drawn UNDER the boat. `emerge` (0→1) drives the rise:
+    /// the sea darkens, bubbles boil up, then the body lifts and the eyes open.
+    static func drawKrakenMurk(_ ctx: GraphicsContext, _ s: CGSize, t: Double, emerge: Double) {
+        let w = s.width, h = s.height
+        let e = min(1, max(0, emerge))
+        let es = e * e * (3 - 2 * e)                 // smoothstep for the rise
+
+        // The deep darkens as it approaches — a little even before you can see it.
+        ctx.fill(Path(CGRect(origin: .zero, size: s)),
+                 with: .color(Color(red: 0.04, green: 0.02, blue: 0.10).opacity(0.12 + 0.36 * e)))
+        ctx.fill(Path(CGRect(origin: .zero, size: s)), with: .radialGradient(
+            Gradient(colors: [.clear, Color(red: 0.02, green: 0.0, blue: 0.08).opacity(0.18 + 0.55 * e)]),
+            center: CGPoint(x: w * 0.5, y: h * 0.45), startRadius: w * 0.22, endRadius: w * 0.92))
+
+        // Bubbles boiling up from the deep — the first hint, strongest during the build-up.
+        let bubA = 0.25 + 0.75 * (1 - e)
+        for k in 0..<16 {
+            let bx = (Double((k * 37) % 100) / 100 + 0.05 * sin(t + Double(k))) * w
+            let speed = 0.28 + Double(k % 4) * 0.09
+            let prog = (t * speed + Double(k) * 0.17).truncatingRemainder(dividingBy: 1)
+            let by = (1 - prog) * h
+            let r = 1.2 + Double(k % 3) * 1.1
+            let fade = sin(prog * .pi)               // fade in at the bottom & out near the top
+            ctx.stroke(Path(ellipseIn: CGRect(x: bx - r, y: by - r, width: r * 2, height: r * 2)),
+                       with: .color(Sea.foam.opacity(0.22 * bubA * fade)), lineWidth: 1)
+        }
+
+        guard es > 0.02 else { return }
+
+        // The body rises from beyond the top edge as it surfaces.
+        let sway = sin(t * 0.8) * 0.02 * w
+        let cx = w * 0.5 + sway
+        let cy = (-0.10 + 0.23 * es) * h             // climbs into view
+        let scale = 0.6 + 0.4 * es
+        let bw = 0.52 * w * scale, bh = 0.34 * h * scale
+        let a = es
+        let bodyTop = Color(red: 0.34, green: 0.15, blue: 0.44)   // lit upper mantle
+        let bodyDark = Color(red: 0.11, green: 0.04, blue: 0.20)  // shadowed underside
+        let biolum = Sea.teal
+
+        // Five waving arms (behind the mantle) — tapering chains of suckered segments.
+        for k in 0..<5 {
+            let dir = (Double(k) - 2) / 2
+            let bxh = cx + dir * bw * 0.30, byh = cy + bh * 0.16
+            let segs = 9
+            for i in 0...segs {
+                let f = Double(i) / Double(segs)
+                let curl = sin(t * 1.6 + Double(k) * 1.3 + f * 3) * (0.04 + 0.06 * f) * w * scale
+                let px = bxh + dir * bw * 0.52 * f + curl
+                let py = byh + bh * 0.72 * f
+                let r = (0.030 * (1 - f) + 0.006) * w * scale
+                ctx.fill(Path(ellipseIn: CGRect(x: px - r, y: py - r, width: r * 2, height: r * 2)),
+                         with: .color(bodyDark.opacity(0.92 * a)))
+                if i % 2 == 1 {
+                    ctx.fill(Path(ellipseIn: CGRect(x: px - r * 0.35, y: py - r * 0.35, width: r * 0.7, height: r * 0.7)),
+                             with: .color(biolum.opacity(0.35 * a)))
+                }
+            }
+        }
+
+        // The mantle — a pointed squid head, top-lit gradient.
+        var mantle = Path()
+        mantle.move(to: CGPoint(x: cx, y: cy - bh * 0.80))
+        mantle.addQuadCurve(to: CGPoint(x: cx + bw * 0.5, y: cy - bh * 0.06), control: CGPoint(x: cx + bw * 0.5, y: cy - bh * 0.66))
+        mantle.addQuadCurve(to: CGPoint(x: cx + bw * 0.30, y: cy + bh * 0.34), control: CGPoint(x: cx + bw * 0.52, y: cy + bh * 0.18))
+        mantle.addQuadCurve(to: CGPoint(x: cx - bw * 0.30, y: cy + bh * 0.34), control: CGPoint(x: cx, y: cy + bh * 0.52))
+        mantle.addQuadCurve(to: CGPoint(x: cx - bw * 0.5, y: cy - bh * 0.06), control: CGPoint(x: cx - bw * 0.52, y: cy + bh * 0.18))
+        mantle.addQuadCurve(to: CGPoint(x: cx, y: cy - bh * 0.80), control: CGPoint(x: cx - bw * 0.5, y: cy - bh * 0.66))
+        mantle.closeSubpath()
+        ctx.fill(mantle, with: .linearGradient(Gradient(colors: [bodyTop.opacity(a), bodyDark.opacity(a)]),
+                                               startPoint: CGPoint(x: cx, y: cy - bh * 0.8), endPoint: CGPoint(x: cx, y: cy + bh * 0.4)))
+        ctx.fill(Path(ellipseIn: CGRect(x: cx - bw * 0.26, y: cy - bh * 0.62, width: bw * 0.46, height: bh * 0.4)),
+                 with: .color(.white.opacity(0.06 * a)))     // sheen
+
+        // Mottled skin + bioluminescent freckles.
+        for k in 0..<14 {
+            let hx = Double((k * 53 + 11) % 100) / 100 - 0.5
+            let hy = Double((k * 31 + 7) % 100) / 100 - 0.5
+            let sx = cx + hx * bw * 0.7, sy = cy + hy * bh * 0.62 - bh * 0.08
+            let rr = (1.0 + Double(k % 3)) * scale
+            let twk = 0.5 + 0.5 * sin(t * 2 + Double(k))
+            ctx.fill(Path(ellipseIn: CGRect(x: sx - rr, y: sy - rr, width: rr * 2, height: rr * 2)),
+                     with: .color(k % 4 == 0 ? biolum.opacity(0.5 * twk * a) : bodyDark.opacity(0.45 * a)))
+        }
+
+        // The eyes open late in the rise — glowing, with a brow, slit pupil and glint.
+        let open = max(0, min(1, (e - 0.55) / 0.4))
+        if open > 0 {
+            let pulse = 0.6 + 0.4 * sin(t * 3)
+            let eh = 0.066 * w * scale * open, ew = 0.10 * w * scale
+            for side in [-1.0, 1.0] {
+                let ex = cx + side * bw * 0.17, ey = cy + bh * 0.05
+                ctx.fill(Path(ellipseIn: CGRect(x: ex - ew * 0.95, y: ey - eh * 0.95, width: ew * 1.9, height: eh * 1.9)),
+                         with: .radialGradient(Gradient(colors: [Color(red: 1, green: 0.8, blue: 0.3).opacity(0.4 * pulse * open), .clear]),
+                                               center: CGPoint(x: ex, y: ey), startRadius: 0, endRadius: ew))     // halo
+                ctx.fill(Path(ellipseIn: CGRect(x: ex - ew / 2, y: ey - eh / 2, width: ew, height: eh)),
+                         with: .color(Color(red: 1, green: 0.84, blue: 0.32).opacity((0.5 + 0.4 * pulse) * open)))  // iris
+                ctx.fill(Path(ellipseIn: CGRect(x: ex - 0.013 * w * scale, y: ey - eh / 2, width: 0.026 * w * scale, height: eh)),
+                         with: .color(.black.opacity(0.88 * open)))                                                 // slit pupil
+                ctx.fill(Path(ellipseIn: CGRect(x: ex - ew * 0.28, y: ey - eh * 0.3, width: ew * 0.2, height: ew * 0.2)),
+                         with: .color(.white.opacity(0.85 * open)))                                                 // glint
+                var brow = Path()
+                brow.move(to: CGPoint(x: ex - ew * 0.75, y: ey - eh * 0.7))
+                brow.addQuadCurve(to: CGPoint(x: ex + ew * 0.75, y: ey - eh * 0.7), control: CGPoint(x: ex, y: ey - eh * 1.35))
+                ctx.stroke(brow, with: .color(bodyDark.opacity(0.9 * open)), lineWidth: 3 * scale)
+            }
+            // A hooked beak below the eyes.
+            var beak = Path()
+            beak.move(to: CGPoint(x: cx, y: cy + bh * 0.18))
+            beak.addLine(to: CGPoint(x: cx - bw * 0.055, y: cy + bh * 0.04))
+            beak.addLine(to: CGPoint(x: cx + bw * 0.055, y: cy + bh * 0.04))
+            beak.closeSubpath()
+            ctx.fill(beak, with: .color(Color(red: 0.06, green: 0.02, blue: 0.10).opacity(open)))
+        }
+    }
+
+    /// The telegraphs + striking tentacles, drawn OVER the boat so they wrap around it.
+    static func drawKrakenStrikes(_ ctx: GraphicsContext, _ s: CGSize, tentacles: [Tentacle]) {
+        for tnt in tentacles { drawTentacle(ctx, s, x: tnt.x, age: tnt.age, seed: tnt.seed) }
+    }
+
+    /// Harpoons in flight, flying up toward the monster.
+    static func drawHarpoons(_ ctx: GraphicsContext, _ s: CGSize, harpoons: [Harpoon]) {
+        let w = s.width, h = s.height
+        for hp in harpoons {
+            let x = hp.x * w, y = hp.y * h
+            let tail = y + 0.075 * h
+            // shaft
+            var shaft = Path(); shaft.move(to: CGPoint(x: x, y: tail)); shaft.addLine(to: CGPoint(x: x, y: y))
+            ctx.stroke(shaft, with: .color(Color(red: 0.45, green: 0.32, blue: 0.20)), lineWidth: 2.4)
+            ctx.stroke(shaft, with: .color(Sea.gold.opacity(0.6)), lineWidth: 0.8)
+            // barbed steel head
+            var head = Path()
+            head.move(to: CGPoint(x: x, y: y - 0.022 * h))
+            head.addLine(to: CGPoint(x: x - 4, y: y + 2))
+            head.addLine(to: CGPoint(x: x + 4, y: y + 2))
+            head.closeSubpath()
+            ctx.fill(head, with: .color(Color(white: 0.85)))
+            // little barbs
+            ctx.stroke(Path { p in p.move(to: CGPoint(x: x - 3, y: y + 6)); p.addLine(to: CGPoint(x: x - 0.5, y: y + 1)) },
+                       with: .color(Color(white: 0.8)), lineWidth: 1.2)
+            ctx.stroke(Path { p in p.move(to: CGPoint(x: x + 3, y: y + 6)); p.addLine(to: CGPoint(x: x + 0.5, y: y + 1)) },
+                       with: .color(Color(white: 0.8)), lineWidth: 1.2)
+        }
+    }
+
+    /// A short burst where a harpoon bit into the kraken.
+    static func drawHarpoonImpact(_ ctx: GraphicsContext, _ s: CGSize, x: Double, y: Double, progress: Double) {
+        let w = s.width, h = s.height
+        let p = min(1, max(0, progress))
+        let cx = x * w, cy = y * h
+        let rr = (0.02 + 0.06 * p) * w
+        ctx.stroke(Path(ellipseIn: CGRect(x: cx - rr, y: cy - rr, width: rr * 2, height: rr * 2)),
+                   with: .color(Sea.foam.opacity(0.8 * (1 - p))), lineWidth: 2)
+        // a spurt of dark ink
+        for k in 0..<5 {
+            let a = Double(k) / 5 * 2 * .pi
+            let d = rr * 0.9
+            let r2 = 2.5 * (1 - p)
+            ctx.fill(Path(ellipseIn: CGRect(x: cx + cos(a) * d - r2, y: cy + sin(a) * d - r2, width: r2 * 2, height: r2 * 2)),
+                     with: .color(Color(red: 0.20, green: 0.06, blue: 0.26).opacity(0.7 * (1 - p))))
+        }
+    }
+
+    private static func drawTentacle(_ ctx: GraphicsContext, _ s: CGSize, x: Double, age: Double, seed: Int) {
+        let w = s.width, h = s.height
+        let strikeY = 0.74
+        let cx = x * w
+
+        var ext = 0.0
+        if age < tentTele {
+            // Telegraph: a pulsing red warning ring where it'll slam.
+            let tp = age / tentTele
+            let rr = (0.035 + 0.05 * tp) * w
+            let warn = 0.5 + 0.5 * sin(age * 22)
+            let cy = strikeY * h
+            ctx.stroke(Path(ellipseIn: CGRect(x: cx - rr, y: cy - rr * 0.55, width: rr * 2, height: rr * 1.1)),
+                       with: .color(Color.red.opacity(0.45 + 0.45 * warn)), lineWidth: 2)
+            ctx.fill(Path(ellipseIn: CGRect(x: cx - rr * 0.45, y: cy - rr * 0.28, width: rr * 0.9, height: rr * 0.55)),
+                     with: .color(.red.opacity(0.12 * warn)))
+            ext = 0.06
+        } else if age < tentTele + tentStrike {
+            let u = (age - tentTele) / tentStrike
+            ext = u * u * (3 - 2 * u)                 // smoothstep up — the slam
+        } else {
+            let u = (age - tentTele - tentStrike) / tentRecede
+            ext = max(0, 1 - u)                       // sink back
+        }
+        guard ext > 0.05 else { return }
+
+        let baseY = 1.14 * h
+        let tipY = (1.14 + (strikeY - 1.14) * ext) * h
+        let segs = 11
+        let phase = Double(seed % 100) * 0.1
+        let tcol = Color(red: 0.40, green: 0.18, blue: 0.48)
+        for i in 0...segs {
+            let f = Double(i) / Double(segs)
+            let yy = baseY + (tipY - baseY) * f
+            let wavx = sin(f * 3.2 + age * 7 + phase) * 0.028 * w * ext
+            let curl = (f * f) * 0.05 * w * sin(age * 5 + phase) * ext
+            let xx = cx + wavx + curl
+            let r = (0.05 * (1 - f) + 0.012) * w
+            ctx.fill(Path(ellipseIn: CGRect(x: xx - r, y: yy - r, width: r * 2, height: r * 2)),
+                     with: .color(tcol.opacity(0.95)))
+            if i % 2 == 0 {                            // suckers
+                ctx.fill(Path(ellipseIn: CGRect(x: xx - r * 0.3, y: yy - r * 0.3, width: r * 0.6, height: r * 0.6)),
+                         with: .color(Sea.coral.opacity(0.5)))
+            }
+        }
+        // White impact ring at the tip during the slam.
+        if age >= tentTele && age < tentTele + tentStrike {
+            let sp = (age - tentTele) / tentStrike
+            let rr = (0.04 + 0.06 * sp) * w
+            ctx.stroke(Path(ellipseIn: CGRect(x: cx - rr, y: tipY - rr * 0.5, width: rr * 2, height: rr)),
+                       with: .color(Sea.foam.opacity(0.55 * (1 - sp))), lineWidth: 2)
+        }
+    }
+
+    // MARK: The Boot Beast ---------------------------------------------------
+
+    private static let bootTele = 0.6, bootDrop = 0.4   // mirrors GameModel.bootThrowTele / bootThrowDrop
+
+    /// A simple cartoon boot centred at `c`, body `size`, rotated by `rot`.
+    private static func drawBootShape(_ ctx: GraphicsContext, at c: CGPoint, size: Double, rot: Double) {
+        var g = ctx
+        g.translateBy(x: c.x, y: c.y)
+        g.rotate(by: .radians(rot))
+        let brown = Color(red: 0.45, green: 0.29, blue: 0.17)
+        let dark = Color(red: 0.28, green: 0.17, blue: 0.10)
+        let s = size
+        g.fill(Path(roundedRect: CGRect(x: -s * 0.30, y: -s * 0.55, width: s * 0.60, height: s * 0.95),
+                                        cornerSize: CGSize(width: s * 0.12, height: s * 0.12)), with: .color(brown))   // leg
+        g.fill(Path(roundedRect: CGRect(x: -s * 0.30, y: s * 0.10, width: s * 0.95, height: s * 0.36),
+                                        cornerSize: CGSize(width: s * 0.12, height: s * 0.12)), with: .color(brown))   // foot/toe
+        g.fill(Path(CGRect(x: -s * 0.32, y: s * 0.40, width: s * 1.0, height: s * 0.12)), with: .color(dark))          // sole
+        g.fill(Path(CGRect(x: -s * 0.34, y: -s * 0.55, width: s * 0.68, height: s * 0.14)), with: .color(dark))        // cuff
+        g.fill(Path(roundedRect: CGRect(x: -s * 0.22, y: -s * 0.42, width: s * 0.16, height: s * 0.74),
+                                        cornerSize: CGSize(width: s * 0.06, height: s * 0.06)),
+               with: .color(.white.opacity(0.10)))                                                                     // leg sheen
+        for i in 0..<3 {                                                                                               // laces
+            let ly = -s * 0.34 + Double(i) * s * 0.17
+            g.fill(Path(ellipseIn: CGRect(x: -s * 0.055, y: ly, width: s * 0.11, height: s * 0.07)),
+                   with: .color(Color(white: 0.85).opacity(0.7)))
+        }
+    }
+
+    /// The boot-monster looming at the top, drawn UNDER the boat. `emerge` (0→1) raises it.
+    static func drawBootBeast(_ ctx: GraphicsContext, _ s: CGSize, t: Double, emerge: Double) {
+        let w = s.width, h = s.height
+        let e = min(1, max(0, emerge)); let es = e * e * (3 - 2 * e)
+
+        // Same dramatic entrance as the kraken — the water darkens and bubbles boil up as it rises.
+        ctx.fill(Path(CGRect(origin: .zero, size: s)),
+                 with: .color(Color(red: 0.05, green: 0.09, blue: 0.05).opacity(0.10 + 0.30 * e)))
+        ctx.fill(Path(CGRect(origin: .zero, size: s)), with: .radialGradient(
+            Gradient(colors: [.clear, Color(red: 0.03, green: 0.06, blue: 0.03).opacity(0.15 + 0.45 * e)]),
+            center: CGPoint(x: w * 0.5, y: h * 0.45), startRadius: w * 0.22, endRadius: w * 0.92))
+        let bubA = 0.25 + 0.75 * (1 - e)
+        for k in 0..<16 {
+            let bx = (Double((k * 37) % 100) / 100 + 0.05 * sin(t + Double(k))) * w
+            let speed = 0.28 + Double(k % 4) * 0.09
+            let prog = (t * speed + Double(k) * 0.17).truncatingRemainder(dividingBy: 1)
+            let by = (1 - prog) * h
+            let r = 1.2 + Double(k % 3) * 1.1
+            ctx.stroke(Path(ellipseIn: CGRect(x: bx - r, y: by - r, width: r * 2, height: r * 2)),
+                       with: .color(Sea.foam.opacity(0.22 * bubA * sin(prog * .pi))), lineWidth: 1)
+        }
+
+        guard es > 0.02 else { return }
+        let cx = w * 0.5 + sin(t * 1.2) * 0.02 * w
+        let cy = (-0.04 + 0.17 * es) * h
+        let bw = 0.44 * w * (0.7 + 0.3 * es), bh = 0.27 * h * (0.7 + 0.3 * es)
+        let bodyLit = Color(red: 0.37, green: 0.49, blue: 0.28)     // sunlit mossy green
+        let bodyDark = Color(red: 0.19, green: 0.29, blue: 0.15)
+        let weed = Color(red: 0.16, green: 0.40, blue: 0.22)
+
+        // Boots jammed all over the beast (behind the body) — varied sizes & angles.
+        for k in 0..<7 {
+            let ang = .pi * (0.08 + 0.84 * Double(k) / 6)
+            let rad = bw * (0.46 + 0.06 * Double(k % 2))
+            let bx = cx + cos(ang) * rad
+            let by = cy + bh * 0.28 - sin(ang) * bh * 0.55
+            let sz = (0.042 + 0.018 * Double(k % 3)) * w * es
+            drawBootShape(ctx, at: CGPoint(x: bx, y: by), size: sz, rot: cos(ang) * 0.9 + sin(t * 3 + Double(k)) * 0.12)
+        }
+
+        // Lumpy junk-pile silhouette — a few overlapping blobs.
+        let lumps: [(Double, Double, Double, Double)] = [
+            (-0.34, -0.16, 0.5, 0.5), (0.32, -0.10, 0.55, 0.55),
+            (-0.24, 0.18, 0.45, 0.4), (0.26, 0.2, 0.42, 0.42)
+        ]
+        for (lx, ly, lwf, lhf) in lumps {
+            ctx.fill(Path(ellipseIn: CGRect(x: cx + lx * bw - bw * lwf / 2, y: cy - bh * 0.7 + ly * bh,
+                                            width: bw * lwf, height: bh * lhf)),
+                     with: .color(bodyDark.opacity(0.9 * es)))
+        }
+        // Main mass with a top-lit gradient.
+        ctx.fill(Path(ellipseIn: CGRect(x: cx - bw / 2, y: cy - bh * 0.7, width: bw, height: bh)),
+                 with: .linearGradient(Gradient(colors: [bodyLit.opacity(es), bodyDark.opacity(es)]),
+                                       startPoint: CGPoint(x: cx, y: cy - bh * 0.7), endPoint: CGPoint(x: cx, y: cy + bh * 0.3)))
+
+        // Barnacles (light) & mottling (dark).
+        for k in 0..<12 {
+            let hx = Double((k * 47 + 9) % 100) / 100 - 0.5
+            let hy = Double((k * 29 + 5) % 100) / 100 - 0.5
+            let sx = cx + hx * bw * 0.66, sy = cy + hy * bh * 0.5 - bh * 0.05
+            let rr = (1.0 + Double(k % 3) * 0.8) * (0.6 + 0.4 * es)
+            ctx.fill(Path(ellipseIn: CGRect(x: sx - rr, y: sy - rr, width: rr * 2, height: rr * 2)),
+                     with: .color(k % 3 == 0 ? Color(white: 0.78).opacity(0.7 * es) : bodyDark.opacity(0.5 * es)))
+        }
+
+        // Seaweed draped over its head.
+        for k in 0..<4 {
+            let sx = cx + (Double(k) - 1.5) * bw * 0.22
+            var wd = Path()
+            wd.move(to: CGPoint(x: sx, y: cy - bh * 0.5))
+            for i in 1...5 {
+                let f = Double(i) / 5
+                wd.addLine(to: CGPoint(x: sx + sin(t * 2 + Double(k) + f * 4) * 0.02 * w, y: cy - bh * 0.5 + f * bh * 0.7))
+            }
+            ctx.stroke(wd, with: .color(weed.opacity(0.8 * es)), lineWidth: 3 * (0.6 + 0.4 * es))
+        }
+
+        // Big googly eyes — heavy lids, wobbling pupils, a shine, and seaweed brows.
+        for side in [-1.0, 1.0] {
+            let ex = cx + side * bw * 0.19, ey = cy + bh * 0.0
+            let er = 0.052 * w * es
+            ctx.fill(Path(ellipseIn: CGRect(x: ex - er, y: ey - er, width: er * 2, height: er * 2)),
+                     with: .color(.white.opacity(0.96 * es)))
+            let pr = er * 0.5
+            let px = ex + sin(t * 4 + side) * er * 0.35, py = ey + cos(t * 3) * er * 0.3
+            ctx.fill(Path(ellipseIn: CGRect(x: px - pr, y: py - pr, width: pr * 2, height: pr * 2)),
+                     with: .color(.black.opacity(0.9 * es)))
+            ctx.fill(Path(ellipseIn: CGRect(x: px - er * 0.34, y: py - er * 0.34, width: pr * 0.7, height: pr * 0.7)),
+                     with: .color(.white.opacity(0.9 * es)))                                          // shine
+            ctx.fill(Path(ellipseIn: CGRect(x: ex - er, y: ey - er * 1.55, width: er * 2, height: er)),
+                     with: .color(bodyDark.opacity(0.9 * es)))                                        // heavy lid
+            var brow = Path()
+            brow.move(to: CGPoint(x: ex - er, y: ey - er * 1.0))
+            brow.addQuadCurve(to: CGPoint(x: ex + er, y: ey - er * 1.0), control: CGPoint(x: ex, y: ey - er * 1.9))
+            ctx.stroke(brow, with: .color(weed.opacity(0.85 * es)), lineWidth: 3 * (0.6 + 0.4 * es))  // seaweed brow
+        }
+
+        // A goofy gap-toothed grin with a tongue.
+        let mw = bw * 0.20, my = cy + bh * 0.18
+        var mouth = Path()
+        mouth.move(to: CGPoint(x: cx - mw, y: my))
+        mouth.addQuadCurve(to: CGPoint(x: cx + mw, y: my), control: CGPoint(x: cx, y: my + bh * 0.22))
+        mouth.addQuadCurve(to: CGPoint(x: cx - mw, y: my), control: CGPoint(x: cx, y: my + bh * 0.10))
+        mouth.closeSubpath()
+        ctx.fill(mouth, with: .color(Color(red: 0.16, green: 0.07, blue: 0.09).opacity(0.85 * es)))
+        ctx.fill(Path(ellipseIn: CGRect(x: cx - mw * 0.4, y: my + bh * 0.05, width: mw * 0.8, height: bh * 0.1)),
+                 with: .color(Color(red: 0.85, green: 0.35, blue: 0.40).opacity(0.8 * es)))            // tongue
+        for tx in [-0.55, 0.25] {
+            ctx.fill(Path(CGRect(x: cx + tx * mw, y: my, width: mw * 0.3, height: bh * 0.055)),
+                     with: .color(.white.opacity(0.85 * es)))                                          // teeth
+        }
+    }
+
+    /// Boots being lobbed at you — a warning ring, then a tumbling boot that lands with a splash.
+    static func drawBootThrows(_ ctx: GraphicsContext, _ s: CGSize, throws bts: [BootThrow]) {
+        let w = s.width, h = s.height
+        let landY = 0.78
+        for b in bts {
+            let cx = b.x * w
+            if b.age < bootTele {
+                let tp = b.age / bootTele
+                let rr = (0.035 + 0.05 * tp) * w
+                let warn = 0.5 + 0.5 * sin(b.age * 22)
+                ctx.stroke(Path(ellipseIn: CGRect(x: cx - rr, y: landY * h - rr * 0.55, width: rr * 2, height: rr * 1.1)),
+                           with: .color(Color.red.opacity(0.4 + 0.4 * warn)), lineWidth: 2)
+            } else {
+                let f = min(1, (b.age - bootTele) / bootDrop)
+                let by = (0.18 + (landY - 0.18) * f) * h
+                drawBootShape(ctx, at: CGPoint(x: cx, y: by), size: 0.06 * w, rot: b.age * 7)
+                if f >= 1 {
+                    let rr = 0.05 * w
+                    ctx.stroke(Path(ellipseIn: CGRect(x: cx - rr, y: landY * h - rr * 0.4, width: rr * 2, height: rr * 0.8)),
+                               with: .color(Sea.foam.opacity(0.5)), lineWidth: 2)
+                }
+            }
+        }
+    }
+
+    // MARK: Sleigh ride ------------------------------------------------------
+
+    /// The towing fish out ahead and the taut line back to the boat. The line whitens then reddens
+    /// as `strain` (0…1) climbs toward a snap.
+    static func drawSleigh(_ ctx: GraphicsContext, _ s: CGSize, fishX: Double, fishY: Double,
+                           boatX: Double, boatY: Double, strain: Double, t: Double) {
+        let w = s.width, h = s.height
+        let fp = CGPoint(x: fishX * w, y: fishY * h)
+        let len = 0.16 * w
+
+        // Churned-up water around the powering fish.
+        for k in 0..<3 {
+            let rp = (t * 1.5 + Double(k) * 0.33).truncatingRemainder(dividingBy: 1)
+            let rr = (0.04 + rp * 0.08) * w
+            ctx.stroke(Path(ellipseIn: CGRect(x: fp.x - rr, y: fp.y - rr * 0.5, width: rr * 2, height: rr)),
+                       with: .color(Sea.foam.opacity(0.30 * (1 - rp))), lineWidth: 1.5)
+        }
+        // A foam crest breaking at its head (it's surging up the screen).
+        let crest = fp.y - len * 0.5
+        ctx.fill(Path(ellipseIn: CGRect(x: fp.x - len * 0.28, y: crest - 4, width: len * 0.56, height: 9)),
+                 with: .color(Sea.foam.opacity(0.55)))
+
+        // The taut line from rod tip to fish — straight-ish, thicker & redder under strain.
+        let tip = rodTip(boatX: boatX, boatY: boatY)
+        let start = CGPoint(x: tip.x * w, y: tip.y * h)
+        var line = Path()
+        line.move(to: start)
+        let sag = 8 * (1 - strain)                                    // a tight line barely bows
+        line.addQuadCurve(to: fp, control: CGPoint(x: (start.x + fp.x) / 2 + sag, y: (start.y + fp.y) / 2))
+        let strainCol = Color(red: 1, green: 1 - strain * 0.75, blue: 1 - strain * 0.9)
+        ctx.stroke(line, with: .color(strainCol.opacity(0.95)), lineWidth: 1.8 + strain * 2.0)
+        if strain > 0.6 {                                            // it shudders when near snapping
+            ctx.stroke(line, with: .color(.white.opacity((strain - 0.6) * 1.5 * (0.5 + 0.5 * sin(t * 30)))),
+                       lineWidth: 0.8)
+        }
+
+        // The big fish itself, leaning into its run.
+        let lean = sin(t * 6) * 0.10 + (fishX - boatX) * 0.6
+        drawTowFish(ctx, at: fp, len: len, lean: lean, t: t)
+    }
+
+    private static func drawTowFish(_ ctx: GraphicsContext, at c: CGPoint, len: Double, lean: Double, t: Double) {
+        var g = ctx
+        g.translateBy(x: c.x, y: c.y)
+        g.rotate(by: .radians(lean))
+        let bl = len, hw = len * 0.21          // body length & half-width
+        let navy = Color(red: 0.10, green: 0.20, blue: 0.42)   // dark back
+        let blue = fishColor(.tuna)                            // flank
+        let finlet = Color(red: 1.0, green: 0.82, blue: 0.26)  // signature yellow finlets
+        let sw = sin(t * 8) * hw * 0.5         // tail/body swish
+
+        // --- Lunate (crescent) tail, behind the body ---
+        var tail = Path()
+        tail.move(to: CGPoint(x: 0, y: bl * 0.36))
+        tail.addQuadCurve(to: CGPoint(x: hw * 1.25 + sw, y: bl * 0.64), control: CGPoint(x: hw * 0.45, y: bl * 0.42))
+        tail.addQuadCurve(to: CGPoint(x: sw * 0.5, y: bl * 0.48), control: CGPoint(x: hw * 0.55 + sw, y: bl * 0.60))
+        tail.addQuadCurve(to: CGPoint(x: -hw * 1.25 + sw, y: bl * 0.64), control: CGPoint(x: -hw * 0.55 + sw, y: bl * 0.60))
+        tail.addQuadCurve(to: CGPoint(x: 0, y: bl * 0.36), control: CGPoint(x: -hw * 0.45, y: bl * 0.42))
+        tail.closeSubpath()
+        g.fill(tail, with: .color(navy))
+
+        // --- Pectoral fins, swept back from the shoulders ---
+        let pf = sin(t * 6) * hw * 0.12
+        for side in [-1.0, 1.0] {
+            var pec = Path()
+            pec.move(to: CGPoint(x: side * hw * 0.55, y: -bl * 0.04))
+            pec.addQuadCurve(to: CGPoint(x: side * hw * 1.5, y: bl * 0.16 + pf),
+                             control: CGPoint(x: side * hw * 1.25, y: bl * 0.02))
+            pec.addQuadCurve(to: CGPoint(x: side * hw * 0.5, y: bl * 0.08),
+                             control: CGPoint(x: side * hw * 0.95, y: bl * 0.12))
+            pec.closeSubpath()
+            g.fill(pec, with: .color(blue.opacity(0.7)))
+        }
+
+        // --- Fusiform body (pointed snout up, narrow caudal peduncle) ---
+        var body = Path()
+        body.move(to: CGPoint(x: 0, y: -bl * 0.5))                                   // snout
+        body.addQuadCurve(to: CGPoint(x: hw, y: -bl * 0.10), control: CGPoint(x: hw * 0.95, y: -bl * 0.40))
+        body.addQuadCurve(to: CGPoint(x: hw * 0.30, y: bl * 0.30), control: CGPoint(x: hw, y: bl * 0.10))
+        body.addLine(to: CGPoint(x: 0, y: bl * 0.36))
+        body.addLine(to: CGPoint(x: -hw * 0.30, y: bl * 0.30))
+        body.addQuadCurve(to: CGPoint(x: -hw, y: -bl * 0.10), control: CGPoint(x: -hw, y: bl * 0.10))
+        body.addQuadCurve(to: CGPoint(x: 0, y: -bl * 0.5), control: CGPoint(x: -hw * 0.95, y: -bl * 0.40))
+        body.closeSubpath()
+        g.fill(body, with: .linearGradient(Gradient(colors: [navy, blue, navy]),
+                                           startPoint: CGPoint(x: 0, y: -bl * 0.5),
+                                           endPoint: CGPoint(x: 0, y: bl * 0.36)))
+
+        // --- Yellow finlets running down toward the tail ---
+        for k in 0..<4 {
+            let f = Double(k) / 4
+            let y = bl * (0.12 + f * 0.18)
+            let x = hw * (0.78 - f * 0.5)
+            for side in [-1.0, 1.0] {
+                var fin = Path()
+                fin.move(to: CGPoint(x: side * x, y: y))
+                fin.addLine(to: CGPoint(x: side * (x + hw * 0.28), y: y + bl * 0.015))
+                fin.addLine(to: CGPoint(x: side * x, y: y + bl * 0.05))
+                fin.closeSubpath()
+                g.fill(fin, with: .color(finlet.opacity(0.9)))
+            }
+        }
+
+        // --- Metallic sheen along one flank + a spine line ---
+        g.fill(Path(ellipseIn: CGRect(x: -hw * 0.55, y: -bl * 0.22, width: hw * 0.5, height: bl * 0.5)),
+               with: .color(.white.opacity(0.16)))
+        var spine = Path()
+        spine.move(to: CGPoint(x: 0, y: -bl * 0.42)); spine.addLine(to: CGPoint(x: 0, y: bl * 0.30))
+        g.stroke(spine, with: .color(navy.opacity(0.6)), lineWidth: max(1, hw * 0.12))
+
+        // --- Eyes near the head (one each side) ---
+        for side in [-1.0, 1.0] {
+            g.fill(Path(ellipseIn: CGRect(x: side * hw * 0.5 - 2.2, y: -bl * 0.30, width: 4.4, height: 4.4)),
+                   with: .color(.black.opacity(0.8)))
+        }
+    }
+
     // MARK: Finish line ------------------------------------------------------
 
     /// A checkered finish banner floating across the water at `y` (normalized). It drifts down toward
