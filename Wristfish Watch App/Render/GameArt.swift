@@ -443,14 +443,40 @@ enum GameArt {
 
     /// A proper boat hull seen from above: a sharp bow at −y, a flat wide transom (stern) at +y.
     /// `hw`/`hh` are the half-width / half-length.
-    private static func hullShape(_ hw: Double, _ hh: Double) -> Path {
+    private static func hullShape(_ hw: Double, _ hh: Double) -> Path { hullShape(.skiff, hw, hh) }
+
+    /// Per-style hull proportions: width, length, bow sharpness (0 round → 1 pointed), stern width.
+    private static func hullParams(_ style: BoatStyle) -> (w: Double, l: Double, bow: Double, stern: Double) {
+        switch style {
+        case .skiff:     return (1.00, 1.00, 0.00, 0.66)
+        case .motorboat: return (0.94, 1.02, 0.35, 0.58)
+        case .trawler:   return (1.16, 0.96, 0.12, 0.84)
+        case .voyager:   return (0.84, 1.10, 0.70, 0.50)
+        case .speedboat: return (0.78, 1.12, 0.95, 0.50)
+        case .sailboat:  return (0.66, 1.12, 0.85, 0.34)
+        case .yacht:     return (0.82, 1.14, 0.80, 0.46)
+        case .boot:      return (1.06, 1.00, 0.15, 0.80)
+        case .barge:     return (1.05, 1.00, 0.00, 1.00)
+        }
+    }
+
+    /// A hull silhouette for a given style — a sharper bow & narrower stern read very differently.
+    private static func hullShape(_ style: BoatStyle, _ hw: Double, _ hh: Double) -> Path {
+        if style == .barge {        // a boxy, flat-fronted barge
+            return Path(roundedRect: CGRect(x: -hw * 1.05, y: -hh * 0.92, width: hw * 2.10, height: hh * 1.84),
+                        cornerSize: CGSize(width: hw * 0.30, height: hw * 0.30))
+        }
+        let pm = hullParams(style)
+        let HW = hw * pm.w, HH = hh * pm.l
+        let cBowX = HW * (0.92 - 0.55 * pm.bow)
+        let cBowY = -HH * (0.66 + 0.22 * pm.bow)
         var p = Path()
-        p.move(to: CGPoint(x: 0, y: -hh))                                          // bow tip
-        p.addQuadCurve(to: CGPoint(x: hw, y: hh * 0.10), control: CGPoint(x: hw * 0.92, y: -hh * 0.66))
-        p.addQuadCurve(to: CGPoint(x: hw * 0.66, y: hh), control: CGPoint(x: hw * 1.00, y: hh * 0.66))
-        p.addLine(to: CGPoint(x: -hw * 0.66, y: hh))                               // flat transom (stern)
-        p.addQuadCurve(to: CGPoint(x: -hw, y: hh * 0.10), control: CGPoint(x: -hw * 1.00, y: hh * 0.66))
-        p.addQuadCurve(to: CGPoint(x: 0, y: -hh), control: CGPoint(x: -hw * 0.92, y: -hh * 0.66))
+        p.move(to: CGPoint(x: 0, y: -HH))                                          // bow tip
+        p.addQuadCurve(to: CGPoint(x: HW, y: HH * 0.10), control: CGPoint(x: cBowX, y: cBowY))
+        p.addQuadCurve(to: CGPoint(x: HW * pm.stern, y: HH), control: CGPoint(x: HW, y: HH * 0.66))
+        p.addLine(to: CGPoint(x: -HW * pm.stern, y: HH))                           // flat transom
+        p.addQuadCurve(to: CGPoint(x: -HW, y: HH * 0.10), control: CGPoint(x: -HW, y: HH * 0.66))
+        p.addQuadCurve(to: CGPoint(x: 0, y: -HH), control: CGPoint(x: -cBowX, y: cBowY))
         p.closeSubpath()
         return p
     }
@@ -459,10 +485,14 @@ enum GameArt {
     /// flat stern, a wooden gunwale/deck, a covered foredeck, an open cockpit with thwart seats,
     /// and a little outboard at the transom. Drawn centred at `c`, bow up, banked by `bank`.
     private static func boatBody(_ ctx: GraphicsContext, at c: CGPoint, hw: Double, hh: Double,
-                                 bank: Double, hull: Color, motor: Bool = true) {
+                                 bank: Double, hull: Color, accent: Color = Sea.coral,
+                                 style: BoatStyle = .skiff, motor: Bool = true) {
         let deck = Color(red: 0.82, green: 0.70, blue: 0.50)   // sun-bleached wooden gunwale/deck
         let well = Color(red: 0.55, green: 0.43, blue: 0.30)   // shaded open interior
         let seat = Color(red: 0.71, green: 0.57, blue: 0.39)   // thwart seats
+        let wf = (style == .barge) ? 1.05 : hullParams(style).w   // effective half-width for this style
+        let ew = hw * wf
+        let sl = hh * hullParams(style).l                         // effective half-length for superstructure
         var g = ctx
         g.translateBy(x: c.x, y: c.y)
         g.rotate(by: .radians(bank))
@@ -471,7 +501,10 @@ enum GameArt {
         var sc = g
         sc.translateBy(x: 0, y: hh * 0.10)
         sc.addFilter(.blur(radius: hw * 0.5))
-        sc.fill(hullShape(hw * 1.04, hh * 1.03), with: .color(.black.opacity(0.40)))
+        sc.fill(hullShape(style, hw * 1.04, hh * 1.03), with: .color(.black.opacity(0.40)))
+
+        // A sailboat's sail sits behind the hull — drawn first, so the boat is on top of it.
+        if style == .sailboat { drawSail(g, hw: ew, hh: sl) }
 
         // Outboard motor sticking off the transom.
         if motor {
@@ -483,31 +516,137 @@ enum GameArt {
         }
 
         // Painted outer hull + a crisp outline.
-        let shell = hullShape(hw, hh)
+        let shell = hullShape(style, hw, hh)
         g.fill(shell, with: .color(hull))
         g.stroke(shell, with: .color(.black.opacity(0.22)), lineWidth: max(0.8, hw * 0.05))
 
         // Wooden deck / gunwale surface (inset hull) — leaves a painted hull band around the rim.
         var dg = g
         dg.translateBy(x: 0, y: hh * 0.015)
-        dg.fill(hullShape(hw * 0.76, hh * 0.84), with: .color(deck))
+        dg.fill(hullShape(style, hw * 0.76, hh * 0.84), with: .color(deck))
 
-        // Open cockpit well over the rear two-thirds (the bow stays a covered foredeck).
-        let well0 = CGRect(x: -hw * 0.45, y: -hh * 0.04, width: hw * 0.90, height: hh * 0.74)
-        g.fill(Path(roundedRect: well0, cornerRadius: hw * 0.30), with: .color(well))
-        // A couple of thwart seats across the well.
-        for fy in [0.16, 0.60] {
+        // Open cockpit well (forward, where the angler sits) + a couple of thwart seats.
+        let well0 = CGRect(x: -ew * 0.42, y: -hh * 0.36, width: ew * 0.84, height: hh * 0.54)
+        g.fill(Path(roundedRect: well0, cornerRadius: ew * 0.28), with: .color(well))
+        for fy in [0.18, 0.62] {
             let yy = well0.minY + well0.height * fy
-            g.fill(Path(roundedRect: CGRect(x: well0.minX, y: yy, width: well0.width, height: hh * 0.10),
+            g.fill(Path(roundedRect: CGRect(x: well0.minX, y: yy, width: well0.width, height: hh * 0.09),
                         cornerRadius: 2), with: .color(seat))
         }
 
-        // Bow trim + a light rim catching the sun along the hull edge.
-        g.stroke(shell, with: .color(.white.opacity(0.30)), lineWidth: max(0.7, hw * 0.05))
-        var bow = Path()
-        bow.move(to: CGPoint(x: 0, y: -hh))
-        bow.addLine(to: CGPoint(x: 0, y: -hh * 0.4))
-        g.stroke(bow, with: .color(.white.opacity(0.25)), lineWidth: max(0.8, hw * 0.06))
+        // Per-boat superstructure (cabins, mast, treasure, …) gives each its identity.
+        drawSuperstructure(g, style, hw: ew, hh: sl, hull: hull, accent: accent)
+
+        // A light rim catching the sun along the hull edge.
+        g.stroke(shell, with: .color(.white.opacity(0.28)), lineWidth: max(0.7, hw * 0.05))
+    }
+
+    /// A sailboat's billowing mainsail — set aft (behind the angler) and drawn behind the hull.
+    private static func drawSail(_ g: GraphicsContext, hw: Double, hh: Double) {
+        var sail = Path()
+        sail.move(to: CGPoint(x: 0, y: hh * 0.14))
+        sail.addQuadCurve(to: CGPoint(x: 0, y: hh * 1.5), control: CGPoint(x: hw * 0.28, y: hh * 0.9))
+        sail.addQuadCurve(to: CGPoint(x: hw * 0.92, y: hh * 0.5), control: CGPoint(x: hw * 0.85, y: hh * 1.0))
+        sail.closeSubpath()
+        g.fill(sail, with: .linearGradient(Gradient(colors: [.white, Color(white: 0.80)]),
+                                           startPoint: CGPoint(x: 0, y: hh * 1.5), endPoint: CGPoint(x: hw, y: hh * 0.5)))
+        g.stroke(sail, with: .color(.black.opacity(0.18)), lineWidth: 0.8)
+    }
+
+    /// The bits that make each boat distinct: cabins, windshields, masts/sails, treasure, boot trim.
+    private static func drawSuperstructure(_ g: GraphicsContext, _ style: BoatStyle,
+                                           hw: Double, hh: Double, hull: Color, accent: Color) {
+        let dark = Color.black.opacity(0.32)
+        let glass = Color(red: 0.55, green: 0.74, blue: 0.90)
+        switch style {
+        case .skiff:
+            break                                       // an open rowing skiff — nothing on deck
+
+        case .motorboat:
+            var ws = Path()                             // console windscreen aft, behind the angler
+            ws.move(to: CGPoint(x: -hw * 0.30, y: hh * 0.34))
+            ws.addLine(to: CGPoint(x: hw * 0.30, y: hh * 0.34))
+            ws.addLine(to: CGPoint(x: hw * 0.20, y: hh * 0.58))
+            ws.addLine(to: CGPoint(x: -hw * 0.20, y: hh * 0.58))
+            ws.closeSubpath()
+            g.fill(ws, with: .color(glass.opacity(0.8)))
+            g.stroke(ws, with: .color(dark), lineWidth: max(0.6, hw * 0.05))
+
+        case .trawler:
+            let wh = CGRect(x: -hw * 0.34, y: hh * 0.30, width: hw * 0.68, height: hh * 0.46)   // wheelhouse aft
+            g.fill(Path(roundedRect: wh, cornerRadius: hw * 0.12), with: .color(accent))
+            g.fill(Path(CGRect(x: wh.minX + hw * 0.07, y: wh.minY + hh * 0.07, width: wh.width - hw * 0.14, height: hh * 0.12)),
+                   with: .color(glass.opacity(0.85)))
+            var mast = Path(); mast.move(to: CGPoint(x: 0, y: hh * 0.30)); mast.addLine(to: CGPoint(x: 0, y: hh * 0.04))
+            g.stroke(mast, with: .color(dark), lineWidth: max(0.8, hw * 0.06))
+            var boom = Path(); boom.move(to: CGPoint(x: -hw * 0.5, y: hh * 0.13)); boom.addLine(to: CGPoint(x: hw * 0.5, y: hh * 0.13))
+            g.stroke(boom, with: .color(dark.opacity(0.7)), lineWidth: max(0.6, hw * 0.04))
+
+        case .voyager:
+            let cab = CGRect(x: -hw * 0.36, y: hh * 0.22, width: hw * 0.72, height: hh * 0.58)   // cabin aft
+            g.fill(Path(roundedRect: cab, cornerRadius: hw * 0.22), with: .color(accent.opacity(0.92)))
+            g.fill(Path(roundedRect: CGRect(x: cab.minX + hw * 0.07, y: cab.minY + hh * 0.09, width: cab.width - hw * 0.14, height: hh * 0.18), cornerRadius: hw * 0.06),
+                   with: .color(glass.opacity(0.9)))                                   // wraparound window
+            g.stroke(Path(roundedRect: cab, cornerRadius: hw * 0.22), with: .color(dark.opacity(0.5)), lineWidth: 0.7)
+
+        case .speedboat:
+            for sx in [-0.13, 0.13] {                   // racing stripes the length of the hull
+                g.fill(Path(CGRect(x: hw * sx - hw * 0.045, y: -hh * 0.9, width: hw * 0.09, height: hh * 1.75)),
+                       with: .color(accent.opacity(0.9)))
+            }
+            var ws = Path()                             // sport cowl aft
+            ws.move(to: CGPoint(x: -hw * 0.24, y: hh * 0.52))
+            ws.addLine(to: CGPoint(x: hw * 0.24, y: hh * 0.52))
+            ws.addLine(to: CGPoint(x: hw * 0.15, y: hh * 0.28))
+            ws.addLine(to: CGPoint(x: -hw * 0.15, y: hh * 0.28))
+            ws.closeSubpath()
+            g.fill(ws, with: .color(Color(red: 0.13, green: 0.17, blue: 0.24).opacity(0.9)))
+
+        case .sailboat:
+            // the sail is drawn behind the hull (drawSail); mast + pennant sit aft, behind the angler
+            var mast = Path(); mast.move(to: CGPoint(x: 0, y: hh * 0.16)); mast.addLine(to: CGPoint(x: 0, y: hh * 1.05))
+            g.stroke(mast, with: .color(Color(red: 0.5, green: 0.36, blue: 0.22)), lineWidth: max(0.9, hw * 0.07))
+            g.fill(Path(CGRect(x: 0, y: hh * 1.0, width: hw * 0.4, height: hh * 0.12)), with: .color(accent))  // pennant
+
+        case .yacht:
+            let lower = CGRect(x: -hw * 0.38, y: hh * 0.12, width: hw * 0.76, height: hh * 0.78)   // superstructure aft
+            g.fill(Path(roundedRect: lower, cornerRadius: hw * 0.16), with: .color(Color(white: 0.95)))
+            g.fill(Path(CGRect(x: lower.minX + hw * 0.06, y: hh * 0.42, width: lower.width - hw * 0.12, height: hh * 0.12)),
+                   with: .color(accent))                                              // gold window band
+            let bridge = CGRect(x: -hw * 0.24, y: hh * 0.20, width: hw * 0.48, height: hh * 0.32)
+            g.fill(Path(roundedRect: bridge, cornerRadius: hw * 0.1), with: .color(Color(white: 0.84)))
+            g.stroke(hullShape(.yacht, hw / hullParams(.yacht).w, hh / hullParams(.yacht).l),
+                     with: .color(accent.opacity(0.8)), lineWidth: max(0.6, hw * 0.05))  // gold sheer line
+
+        case .boot:
+            g.fill(Path(roundedRect: CGRect(x: -hw * 0.7, y: hh * 0.4, width: hw * 1.4, height: hh * 0.42), cornerRadius: hw * 0.2),
+                   with: .color(Color(red: 0.30, green: 0.19, blue: 0.11)))           // folded cuff at the stern
+            for i in 0..<4 {                                                          // lace eyelets toward the stern
+                let ly = hh * 0.06 + Double(i) * hh * 0.22
+                for sx in [-1.0, 1.0] {
+                    g.fill(Path(ellipseIn: CGRect(x: sx * hw * 0.12 - hw * 0.05, y: ly, width: hw * 0.10, height: hh * 0.06)),
+                           with: .color(Color(white: 0.85).opacity(0.85)))
+                }
+            }
+            g.stroke(hullShape(.boot, hw / hullParams(.boot).w, hh / hullParams(.boot).l),
+                     with: .color(Color(red: 0.20, green: 0.12, blue: 0.07)), lineWidth: max(1, hw * 0.09))  // thick sole
+
+        case .barge:
+            for i in 0..<3 {                                                          // deck planks
+                let ly = -hh * 0.5 + Double(i) * hh * 0.5
+                var ln = Path(); ln.move(to: CGPoint(x: -hw * 0.9, y: ly)); ln.addLine(to: CGPoint(x: hw * 0.9, y: ly))
+                g.stroke(ln, with: .color(.black.opacity(0.18)), lineWidth: 1)
+            }
+            let ch = CGRect(x: -hw * 0.34, y: hh * 0.24, width: hw * 0.68, height: hh * 0.5)   // chest aft
+            g.fill(Path(roundedRect: ch, cornerRadius: hw * 0.08), with: .color(Color(red: 0.42, green: 0.27, blue: 0.14)))
+            g.fill(Path(CGRect(x: ch.minX, y: ch.midY - hh * 0.04, width: ch.width, height: hh * 0.08)), with: .color(accent))
+            g.fill(Path(ellipseIn: CGRect(x: -hw * 0.06, y: ch.midY - hh * 0.04, width: hw * 0.12, height: hh * 0.08)),
+                   with: .color(Color(white: 0.9)))                                   // lock
+            for d in [-0.5, 0.5] {                                                    // gold spilling on deck
+                g.fill(Path(ellipseIn: CGRect(x: hw * d - hw * 0.07, y: hh * 0.14, width: hw * 0.14, height: hh * 0.09)),
+                       with: .color(accent.opacity(0.95)))
+            }
+        }
     }
 
     // MARK: Drifting boat (very rare obstacle — another boat crossing slowly) -
@@ -549,11 +688,13 @@ enum GameArt {
     }
 
     static func drawBoat(_ ctx: GraphicsContext, _ s: CGSize, x: Double, boatY: Double,
-                         wake: [Double], t: Double, speed: Double = 1, timeOfDay tod: Double = 0) {
+                         wake: [Double], t: Double, speed: Double = 1, timeOfDay tod: Double = 0,
+                         hull: Color = Sea.gold, accent: Color = Sea.coral, scale: Double = 1,
+                         style: BoatStyle = .skiff, angler: Bool = true) {
         let cx = x * s.width
         let cy = boatY * s.height
-        let hw = 0.066 * s.width
-        let hh = 0.085 * s.height
+        let hw = 0.066 * s.width * scale
+        let hh = 0.085 * s.height * scale
 
         // Bank gently into the turn (from how the boat's been moving lately — a smooth debounce).
         let recent = wake.first ?? x
@@ -591,22 +732,25 @@ enum GameArt {
                with: .color(Sea.foam.opacity(0.5 * speed)))
 
         // Shared hull / deck / cockpit look (no motor — this one's worked by rod).
-        boatBody(ctx, at: CGPoint(x: cx, y: cy), hw: hw, hh: hh, bank: bank, hull: Sea.gold, motor: false)
+        boatBody(ctx, at: CGPoint(x: cx, y: cy), hw: hw, hh: hh, bank: bank,
+                 hull: hull, accent: accent, style: style, motor: false)
 
         // White foam churning right behind the stern — only once under way.
         c.fill(Path(ellipseIn: CGRect(x: -hw * 0.5, y: hh * 0.86, width: hw, height: hh * 0.26)),
                with: .color(Sea.foam.opacity(0.5 * speed)))
 
         // The angler sitting in the cockpit well + the rod reaching out over the bow.
-        c.fill(Path(ellipseIn: CGRect(x: -hw * 0.26, y: hh * 0.18, width: hw * 0.52, height: hw * 0.52)),
-               with: .color(Sea.coral))
-        c.fill(Path(ellipseIn: CGRect(x: -hw * 0.13, y: hh * 0.10, width: hw * 0.26, height: hw * 0.26)),
-               with: .color(Color(red: 0.93, green: 0.80, blue: 0.66)))           // head
-        var rod = Path()
-        rod.move(to: CGPoint(x: hw * 0.12, y: hh * 0.22))
-        rod.addQuadCurve(to: CGPoint(x: 0, y: -0.055 * s.height),
-                         control: CGPoint(x: hw * 0.5, y: -hh * 0.5))
-        c.stroke(rod, with: .color(Color(red: 0.30, green: 0.22, blue: 0.15)), lineWidth: 1.6)
+        if angler {
+            c.fill(Path(ellipseIn: CGRect(x: -hw * 0.26, y: -hh * 0.06, width: hw * 0.52, height: hw * 0.52)),
+                   with: .color(accent))
+            c.fill(Path(ellipseIn: CGRect(x: -hw * 0.13, y: -hh * 0.14, width: hw * 0.26, height: hw * 0.26)),
+                   with: .color(Color(red: 0.93, green: 0.80, blue: 0.66)))           // head
+            var rod = Path()
+            rod.move(to: CGPoint(x: hw * 0.12, y: -hh * 0.02))
+            rod.addQuadCurve(to: CGPoint(x: 0, y: -0.055 * s.height),
+                             control: CGPoint(x: hw * 0.5, y: -hh * 0.5))
+            c.stroke(rod, with: .color(Color(red: 0.30, green: 0.22, blue: 0.15)), lineWidth: 1.6)
+        }
     }
 
     /// A soft, animated foam trail that follows the boat's recent path (curves as you steer).

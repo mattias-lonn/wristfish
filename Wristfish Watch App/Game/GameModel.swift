@@ -268,6 +268,9 @@ final class GameModel: ObservableObject {
     // The level being played (freeplay by default).
     private(set) var config = LevelConfig.freeplay
 
+    // The chosen (cosmetic) boat for this trip.
+    private(set) var boat = BoatModel.selected
+
     // Objective tracking (campaign).
     private(set) var fishCount = 0              // scoring fish landed this level
     private var caught: [FishKind: Int] = [:]   // per-species tally
@@ -438,6 +441,7 @@ final class GameModel: ObservableObject {
     /// Start (or restart) a playthrough of the given level. Defaults to endless freeplay.
     func start(_ config: LevelConfig = .freeplay) {
         self.config = config
+        boat = BoatModel.selected            // pick up the player's chosen boat for this trip
         baseScroll = config.baseScroll
         scrollRamp = config.scrollRamp
         rampSeconds = config.rampSeconds
@@ -583,7 +587,7 @@ final class GameModel: ObservableObject {
         birdXOffset = curBaseX - ((0.5 - 0.65 * birdDir) + (1.20 * birdDir) * p)
         spawnFeathers(at: bp)
         let pts = birdHitPts * scoreMultiplier
-        score += pts
+        award(pts)
         showFlash("Bonk! +\(pts)")
         haptics.play(.tug)
     }
@@ -752,7 +756,7 @@ final class GameModel: ObservableObject {
         if rockBreakT > 0 && hit.kind == .rock {
             shatters.append(Shatter(x: hit.x, y: hit.y, r: hit.r, seed: hit.seed))
             rocks.removeAll { $0.id == hit.id }
-            score += rockSmashPts * scoreMultiplier        // cleaving a rock pays a little
+            award(rockSmashPts * scoreMultiplier)          // cleaving a rock pays a little
             haptics.play(.tug)
             return false
         }
@@ -1024,13 +1028,13 @@ final class GameModel: ObservableObject {
         let dEye = min(abs(h.x - (cx - 0.088)), abs(h.x - (cx + 0.088)))
         if dEye < harpoonEyeR {
             krakenHP = max(0, krakenHP - harpoonEyeDmg)
-            score += harpoonEyePts * scoreMultiplier
+            award(harpoonEyePts * scoreMultiplier)
             harpoonHitX = h.x; harpoonHitY = h.y; harpoonHitT = 0
             haptics.play(.tug)
             return true
         } else if abs(h.x - cx) < harpoonBodyHalf {
             krakenHP = max(0, krakenHP - harpoonBodyDmg)
-            score += harpoonBodyPts * scoreMultiplier
+            award(harpoonBodyPts * scoreMultiplier)
             harpoonHitX = h.x; harpoonHitY = h.y; harpoonHitT = 0
             haptics.play(.reel)
             return true
@@ -1048,7 +1052,7 @@ final class GameModel: ObservableObject {
     private func endKraken(drivenOff: Bool) {
         tentacles = []; harpoons = []
         let bonus = (krakenBonus + (drivenOff ? krakenDriveOffBonus : 0)) * scoreMultiplier
-        score += bonus
+        award(bonus)
         triggerScorePop(bonus, mult: 1, perfect: false)
         showFlash(drivenOff ? "DROVE IT OFF!" : "SURVIVED!")
         haptics.play(.catchBig)
@@ -1113,7 +1117,7 @@ final class GameModel: ObservableObject {
     private func endBootBeast() {
         bootThrows = []
         let bonus = bootBeastBonus * scoreMultiplier
-        score += bonus
+        award(bonus)
         triggerScorePop(bonus, mult: 1, perfect: false)
         showFlash("BEAST BUSTED!")
         haptics.play(.catchBig)
@@ -1196,6 +1200,7 @@ final class GameModel: ObservableObject {
         if scoring { streak += 1; comboMult = min(maxCombo, streak) }
         if kind == .boot {                                   // boots pile up → summon the Boot Beast
             bootsThisTrip += 1
+            LocalStore.addBoot()                             // lifetime tally (boat unlocks)
             if bootsThisTrip % bootBeastEvery == 0 { pendingBootBeast = true }
         }
         let perfect = scoring && reelOutTime <= perfectTol      // never (really) left the zone
@@ -1205,10 +1210,11 @@ final class GameModel: ObservableObject {
         if perfect { pts = Int((Double(pts) * perfectBonus).rounded()) }
         if landingViaSleigh { pts = Int((Double(pts) * sleighBonus).rounded()) }   // a hard-won tow pays extra
         landingViaSleigh = false
-        score += pts
+        award(pts)
 
         if scoring {
             fishCount += 1
+            LocalStore.addFish()                            // lifetime tally (boat unlocks)
             caught[kind, default: 0] += 1
             bestComboReached = max(bestComboReached, comboMult)
             if perfect { levelHadPerfect = true }
@@ -1231,6 +1237,12 @@ final class GameModel: ObservableObject {
         scorePop = value; scorePopMult = mult; scorePopPerfect = perfect; scorePopT = 0
     }
 
+    /// Add to the run score and to the lifetime tally (which drives boat unlocks).
+    private func award(_ pts: Int) {
+        score += pts
+        LocalStore.addScore(pts)
+    }
+
     /// Reeled a special all the way up: claim the chest/pickaxe — or set off the mine.
     private func landSpecial(_ sp: Special) {
         switch sp {
@@ -1239,6 +1251,7 @@ final class GameModel: ObservableObject {
             return
         case .chest:
             doublePointsT = chestDuration
+            LocalStore.addChest()                           // lifetime tally (boat unlocks)
             showFlash("DOUBLE POINTS!")
             haptics.play(.catchBig)
         case .pickaxe:

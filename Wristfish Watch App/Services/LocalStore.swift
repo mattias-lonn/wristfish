@@ -47,6 +47,28 @@ enum LocalStore {
     /// Total stars across the campaign (for the menu).
     static func totalStars() -> Int { starsMap().values.reduce(0, +) }
 
+    // MARK: Lifetime stats + boat selection (cosmetic unlocks) -------------
+
+    private static let totalFishKey = "wf_total_fish"
+    private static let totalScoreKey = "wf_total_score"
+    private static let totalBootsKey = "wf_total_boots"
+    private static let totalChestsKey = "wf_total_chests"
+    private static let boatKey = "wf_boat"
+
+    static func totalFish() -> Int { UserDefaults.standard.integer(forKey: totalFishKey) }
+    static func totalScore() -> Int { UserDefaults.standard.integer(forKey: totalScoreKey) }
+    static func totalBoots() -> Int { UserDefaults.standard.integer(forKey: totalBootsKey) }
+    static func totalChests() -> Int { UserDefaults.standard.integer(forKey: totalChestsKey) }
+
+    static func addFish(_ n: Int = 1)  { UserDefaults.standard.set(totalFish() + n,  forKey: totalFishKey) }
+    static func addBoot(_ n: Int = 1)  { UserDefaults.standard.set(totalBoots() + n, forKey: totalBootsKey) }
+    static func addChest(_ n: Int = 1) { UserDefaults.standard.set(totalChests() + n, forKey: totalChestsKey) }
+    static func addScore(_ n: Int)     { if n > 0 { UserDefaults.standard.set(totalScore() + n, forKey: totalScoreKey) } }
+
+    /// The chosen boat id (defaults to 0 = the starter Skiff).
+    static func selectedBoat() -> Int { UserDefaults.standard.integer(forKey: boatKey) }
+    static func setSelectedBoat(_ id: Int) { UserDefaults.standard.set(id, forKey: boatKey) }
+
     /// Defaults to ON when never set.
     static var hapticsEnabled: Bool {
         get {

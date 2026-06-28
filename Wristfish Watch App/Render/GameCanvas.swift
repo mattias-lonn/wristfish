@@ -86,7 +86,8 @@ struct GameCanvas: View {
 
             GameArt.drawBoat(ctx, size, x: model.boatX, boatY: model.boatY,
                              wake: model.wakeTrail, t: model.elapsed, speed: model.boatSpeed,
-                             timeOfDay: model.timeOfDay)
+                             timeOfDay: model.timeOfDay, hull: model.boat.hull, accent: model.boat.accent,
+                             style: model.boat.style)
 
             // The gull itself flies over the top of everything — straight across, or diving for a fish.
             if model.birdActive {

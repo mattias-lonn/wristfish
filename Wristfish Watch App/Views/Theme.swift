@@ -27,6 +27,91 @@ enum Sea {
     }
 }
 
+// MARK: - Boats (cosmetic only — no gameplay advantage) -----------------------
+
+/// What you must rack up (across all trips) to unlock a boat.
+enum BoatUnlock {
+    case none
+    case fish(Int)
+    case score(Int)
+    case boots(Int)
+    case chests(Int)
+
+    var label: String {
+        switch self {
+        case .none:          return "Starter boat"
+        case .fish(let n):   return "Catch \(n) fish"
+        case .score(let n):  return "Earn \(n) points"
+        case .boots(let n):  return "Catch \(n) boots"
+        case .chests(let n): return "Catch \(n) chests"
+        }
+    }
+    /// A compact metric word for tight tiles.
+    var metric: String {
+        switch self {
+        case .none:   return ""
+        case .fish:   return "Fish"
+        case .score:  return "Pts"
+        case .boots:  return "Boots"
+        case .chests: return "Chests"
+        }
+    }
+    var current: Int {
+        switch self {
+        case .none:   return 1
+        case .fish:   return LocalStore.totalFish()
+        case .score:  return LocalStore.totalScore()
+        case .boots:  return LocalStore.totalBoots()
+        case .chests: return LocalStore.totalChests()
+        }
+    }
+    var target: Int {
+        switch self {
+        case .none: return 1
+        case .fish(let n), .score(let n), .boots(let n), .chests(let n): return n
+        }
+    }
+    var met: Bool { current >= target }
+}
+
+/// Distinct hull silhouettes so each boat reads differently, not just recoloured.
+enum BoatStyle { case skiff, motorboat, trawler, voyager, speedboat, sailboat, yacht, boot, barge }
+
+/// A selectable boat. Looks differ (shape + details); gameplay is identical for every boat.
+struct BoatModel: Identifiable {
+    let id: Int
+    let name: String
+    let hull: Color
+    let accent: Color          // trim / the angler's gear
+    let style: BoatStyle
+    let unlock: BoatUnlock
+
+    var isUnlocked: Bool {
+        #if DEBUG
+        return true             // dev: all boats pickable so we can see every skin
+        #else
+        return unlock.met
+        #endif
+    }
+
+    static let all: [BoatModel] = [
+        .init(id: 0, name: "Skiff",          hull: Sea.gold,                                  accent: Sea.coral,                                 style: .skiff,     unlock: .none),
+        .init(id: 1, name: "Mariner",        hull: Color(red: 0.28, green: 0.55, blue: 0.92), accent: Color(white: 0.95),                        style: .motorboat, unlock: .fish(100)),
+        .init(id: 2, name: "Trawler",        hull: Color(red: 0.30, green: 0.52, blue: 0.34), accent: Sea.gold,                                  style: .trawler,   unlock: .fish(500)),
+        .init(id: 3, name: "Voyager",        hull: Color(red: 0.16, green: 0.62, blue: 0.60), accent: Color(white: 0.96),                        style: .voyager,   unlock: .fish(1500)),
+        .init(id: 4, name: "Cruiser",        hull: Color(red: 0.86, green: 0.24, blue: 0.26), accent: Color(red: 0.98, green: 0.92, blue: 0.78), style: .speedboat, unlock: .score(25_000)),
+        .init(id: 5, name: "Clipper",        hull: Color(red: 0.90, green: 0.91, blue: 0.94), accent: Sea.blue,                                  style: .sailboat,  unlock: .score(70_000)),
+        .init(id: 6, name: "Flagship",       hull: Color(red: 0.15, green: 0.16, blue: 0.20), accent: Sea.gold,                                  style: .yacht,     unlock: .score(150_000)),
+        .init(id: 7, name: "Old Boot",       hull: Color(red: 0.46, green: 0.29, blue: 0.16), accent: Color(red: 0.26, green: 0.16, blue: 0.10), style: .boot,      unlock: .boots(100)),
+        .init(id: 8, name: "Treasure Barge", hull: Color(red: 0.40, green: 0.27, blue: 0.16), accent: Sea.gold,                                  style: .barge,     unlock: .chests(100)),
+    ]
+
+    static var selected: BoatModel {
+        let id = LocalStore.selectedBoat()
+        return all.first { $0.id == id && $0.isUnlocked } ?? all[0]
+    }
+}
+
 // MARK: - Buttons
 
 /// Filled teal→blue capsule, dark text — the hero action.
