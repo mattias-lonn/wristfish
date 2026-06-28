@@ -22,6 +22,11 @@ enum Sea {
     static var gradient: LinearGradient {
         LinearGradient(colors: [teal, blue], startPoint: .leading, endPoint: .trailing)
     }
+    /// Brighter teal→sky for titles, so the right half stays legible on navy.
+    static var titleGradient: LinearGradient {
+        LinearGradient(colors: [teal, Color(red: 0.55, green: 0.80, blue: 1.0)],
+                       startPoint: .leading, endPoint: .trailing)
+    }
     static var waterGradient: LinearGradient {
         LinearGradient(colors: [shallow, water, deep], startPoint: .top, endPoint: .bottom)
     }
@@ -120,7 +125,7 @@ struct SeaPrimaryButton: ButtonStyle {
         configuration.label
             .font(.body.weight(.semibold))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
+            .padding(.vertical, 11)
             .background(Sea.gradient, in: Capsule())
             .foregroundStyle(.black)
             .opacity(configuration.isPressed ? 0.75 : 1)
@@ -135,12 +140,24 @@ struct SeaSecondaryButton: ButtonStyle {
         configuration.label
             .font(.body.weight(.medium))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-            .background(tint.opacity(0.16), in: Capsule())
-            .overlay(Capsule().stroke(tint.opacity(0.5), lineWidth: 1))
+            .padding(.vertical, 11)
+            .background(tint.opacity(0.18), in: Capsule())
+            .overlay(Capsule().stroke(tint.opacity(0.55), lineWidth: 1))
             .foregroundStyle(tint)
             .opacity(configuration.isPressed ? 0.75 : 1)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
+    }
+}
+
+// MARK: - Shared title style
+
+extension View {
+    /// The one screen-heading look used by every sub-screen (Campaign, Boats, Tutorial, Settings).
+    func screenTitle() -> some View {
+        self.font(.system(size: 18, weight: .black, design: .rounded))
+            .tracking(1)
+            .foregroundStyle(Sea.titleGradient)
+            .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
     }
 }
 

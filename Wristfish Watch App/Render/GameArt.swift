@@ -50,6 +50,27 @@ enum GameArt {
     /// A bump that peaks around sunset — drives the warm horizon glow.
     private static func sunsetAmount(_ tod: Double) -> Double { max(0, 1 - abs(tod - 0.56) / 0.34) }
 
+    /// A few faint little V-wakes drifting down the water — ambient life for the menu header (no obstacles).
+    static func drawAmbientWake(_ ctx: GraphicsContext, _ s: CGSize, t: Double) {
+        let w = s.width, h = s.height
+        for i in 0..<5 {
+            let hx = Double((i * 61 + 13) % 100) / 100
+            let speed = 0.30 + Double(i % 3) * 0.12
+            let prog = (t * speed + Double(i) * 0.23).truncatingRemainder(dividingBy: 1)
+            let cy = prog * h
+            let cx = (hx + 0.02 * sin(t * 0.5 + Double(i))) * w
+            let fade = sin(prog * .pi)                      // fade in at the top, out at the bottom
+            guard fade > 0 else { continue }
+            let sz = (0.05 + 0.02 * Double(i % 2)) * h
+            for side in [-1.0, 1.0] {                       // a little diverging V wake
+                var p = Path()
+                p.move(to: CGPoint(x: cx, y: cy))
+                p.addLine(to: CGPoint(x: cx + side * sz * 0.5, y: cy + sz))
+                ctx.stroke(p, with: .color(Sea.foam.opacity(0.16 * fade)), lineWidth: 1.5)
+            }
+        }
+    }
+
     // MARK: Water background -------------------------------------------------
 
     /// An irregular soft "blob" outline (a wobbled circle) — clips caustic light into organic shapes.
@@ -205,7 +226,7 @@ enum GameArt {
 
     // MARK: Fish-here ripples -----------------------------------------------
 
-    static func drawRipple(_ ctx: GraphicsContext, _ s: CGSize, _ h: Hint) {
+    static func drawRipple(_ ctx: GraphicsContext, _ s: CGSize, _ h: Hint, alpha: Double = 1) {
         let center = p(h.x, h.y, s)
         let tint = h.deep ? Sea.blue : Sea.teal
         let baseR = (h.deep ? 0.085 : 0.055) * s.width
@@ -216,17 +237,28 @@ enum GameArt {
             let r = baseR * (0.5 + t)
             let ring = Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r * 0.6,
                                               width: r * 2, height: r * 1.2))
-            ctx.stroke(ring, with: .color(tint.opacity(0.5 * (1 - t))), lineWidth: h.deep ? 2 : 1.5)
+            ctx.stroke(ring, with: .color(tint.opacity(0.5 * (1 - t) * alpha)), lineWidth: h.deep ? 2 : 1.5)
         }
         // Deep spots show a dark fish shadow drifting under the surface.
         if h.deep {
             let shadow = Path(ellipseIn: CGRect(x: center.x - baseR * 0.5, y: center.y - baseR * 0.2,
                                                 width: baseR, height: baseR * 0.45))
-            ctx.fill(shadow, with: .color(Sea.deep.opacity(0.55)))
+            ctx.fill(shadow, with: .color(Sea.deep.opacity(0.55 * alpha)))
         }
         // Centre glint.
         let dot = Path(ellipseIn: CGRect(x: center.x - 2, y: center.y - 2, width: 4, height: 4))
-        ctx.fill(dot, with: .color(tint.opacity(0.8)))
+        ctx.fill(dot, with: .color(tint.opacity(0.8 * alpha)))
+    }
+
+    /// Fish ripples drifting down in front of the menu boat — occasional, fading in & out.
+    static func drawMenuRipples(_ ctx: GraphicsContext, _ s: CGSize, t: Double, fade: Double = 1) {
+        for i in 0..<3 {
+            let speed = 0.16 + Double(i) * 0.05
+            let prog = (t * speed + Double(i) * 0.41).truncatingRemainder(dividingBy: 1)
+            let y = -0.05 + prog * 0.62                 // from above the boat, drifting down past it
+            let x = 0.5 + (Double(i) - 1) * 0.18        // near the boat's lane
+            drawRipple(ctx, s, Hint(x: x, y: y, deep: i % 2 == 0, phase: t), alpha: 0.9 * sin(prog * .pi) * fade)
+        }
     }
 
     // MARK: Leaping fish (ambient) ------------------------------------------
@@ -690,7 +722,8 @@ enum GameArt {
     static func drawBoat(_ ctx: GraphicsContext, _ s: CGSize, x: Double, boatY: Double,
                          wake: [Double], t: Double, speed: Double = 1, timeOfDay tod: Double = 0,
                          hull: Color = Sea.gold, accent: Color = Sea.coral, scale: Double = 1,
-                         style: BoatStyle = .skiff, angler: Bool = true) {
+                         style: BoatStyle = .skiff, angler: Bool = true,
+                         casting: Bool = false, castT: Double = 0) {
         let cx = x * s.width
         let cy = boatY * s.height
         let hw = 0.066 * s.width * scale
@@ -739,18 +772,41 @@ enum GameArt {
         c.fill(Path(ellipseIn: CGRect(x: -hw * 0.5, y: hh * 0.86, width: hw, height: hh * 0.26)),
                with: .color(Sea.foam.opacity(0.5 * speed)))
 
-        // The angler sitting in the cockpit well + the rod reaching out over the bow.
+        // The angler sitting in the cockpit well + the rod. While casting he winds the rod back,
+        // then whips it forward and the line flies out over the bow.
         if angler {
-            c.fill(Path(ellipseIn: CGRect(x: -hw * 0.26, y: -hh * 0.06, width: hw * 0.52, height: hw * 0.52)),
+            // Rod poses (boat-local): rest forward · wound back · whipped forward.
+            let restTip = CGPoint(x: 0, y: -0.055 * s.height), restCtrl = CGPoint(x: hw * 0.16, y: -hh * 0.45)
+            let backTip = CGPoint(x: hw * 0.72, y: hh * 0.66), backCtrl = CGPoint(x: hw * 0.55, y: hh * 0.22)
+            let castTip = CGPoint(x: -hw * 0.10, y: -0.062 * s.height), castCtrl = CGPoint(x: -hw * 0.10, y: -hh * 0.5)
+            var tip = restTip, ctrl = restCtrl, lean = 0.0
+            if casting {
+                let wind = 0.22, whip = 0.40, settle = 0.58       // mirrors GameModel.castWindup
+                if castT < wind {
+                    let u = smooth(castT / wind); tip = lerpP(restTip, backTip, u); ctrl = lerpP(restCtrl, backCtrl, u)
+                } else if castT < whip {
+                    let u = smooth((castT - wind) / (whip - wind))
+                    tip = lerpP(backTip, castTip, u); ctrl = lerpP(backCtrl, castCtrl, u)
+                    lean = -hh * 0.05 * sin(u * .pi)              // a little forward bob on the whip
+                } else if castT < settle {
+                    let u = smooth((castT - whip) / (settle - whip)); tip = lerpP(castTip, restTip, u); ctrl = lerpP(castCtrl, restCtrl, u)
+                }
+            }
+            // Body + head (lean forward slightly during the whip).
+            c.fill(Path(ellipseIn: CGRect(x: -hw * 0.26, y: -hh * 0.06 + lean, width: hw * 0.52, height: hw * 0.52)),
                    with: .color(accent))
-            c.fill(Path(ellipseIn: CGRect(x: -hw * 0.13, y: -hh * 0.14, width: hw * 0.26, height: hw * 0.26)),
+            c.fill(Path(ellipseIn: CGRect(x: -hw * 0.13, y: -hh * 0.14 + lean, width: hw * 0.26, height: hw * 0.26)),
                    with: .color(Color(red: 0.93, green: 0.80, blue: 0.66)))           // head
             var rod = Path()
             rod.move(to: CGPoint(x: hw * 0.12, y: -hh * 0.02))
-            rod.addQuadCurve(to: CGPoint(x: 0, y: -0.055 * s.height),
-                             control: CGPoint(x: hw * 0.5, y: -hh * 0.5))
-            c.stroke(rod, with: .color(Color(red: 0.30, green: 0.22, blue: 0.15)), lineWidth: 1.6)
+            rod.addQuadCurve(to: tip, control: ctrl)
+            c.stroke(rod, with: .color(Color(red: 0.30, green: 0.22, blue: 0.15)), lineWidth: 1.8)
         }
+    }
+
+    private static func smooth(_ u: Double) -> Double { let x = min(1, max(0, u)); return x * x * (3 - 2 * x) }
+    private static func lerpP(_ a: CGPoint, _ b: CGPoint, _ t: Double) -> CGPoint {
+        CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
     }
 
     /// A soft, animated foam trail that follows the boat's recent path (curves as you steer).

@@ -38,6 +38,7 @@ final class GameModel: ObservableObject {
     private let castTol     = 0.19      // how close (x) a ripple must be to the drop point
     private let castGrow    = 0.42      // how fast the cast extends while aiming (slower = easier timing)
     private let castMaxReach = 0.66     // farthest a cast can reach (normalized, ahead of boat)
+    let castWindup  = 0.22              // the rod winds back this long before the line flies out (art mirrors this)
     private let depthTol    = 0.17      // how close (distance) the drop must match a ripple
 
     // Reeling — keep the Crown-controlled marker inside the slowly-drifting zone to land the fish.
@@ -184,6 +185,7 @@ final class GameModel: ObservableObject {
     private(set) var predatorActive = false     // a predator is attacking the hooked fish right now
     private(set) var surfaceCaught = false      // did the surfacing transition follow a catch?
     private(set) var castReach = 0.0            // how far the current cast has reached (aiming/locked)
+    private(set) var castT = 0.0                // seconds since the cast began (drives the rod animation)
     private(set) var lastCatch: CaughtFish?
     private(set) var isBest = false             // this trip beat the stored best
 
@@ -643,7 +645,7 @@ final class GameModel: ObservableObject {
     func tap() {
         switch phase {
         case .boating:    startAim()         // first tap — the line starts going out
-        case .casting:    dropCast()         // second tap — drop it at the reached distance
+        case .casting:    if castReach > 0 { dropCast() }   // drop once the line is actually out (past the wind-up)
         case .sleighRide: sleighHaul()       // yank to tire it faster — but it strains the line
         case .kraken:     fireHarpoon()      // throw a harpoon straight up at the monster
         case .landed:     phase = .boating   // continue the trip
@@ -801,9 +803,12 @@ final class GameModel: ObservableObject {
 
     private func tickCasting(_ dt: Double) {
         boatSpeed = 1
+        castT += dt
         advanceWorld(dt)                                          // boat still drifts slowly while you aim
         updateBird(dt)
-        castReach = min(castMaxReach, castReach + castGrow * dt)  // line keeps extending until you tap
+        if castT >= castWindup {                                  // hold the line in while the rod winds back
+            castReach = min(castMaxReach, castReach + castGrow * dt)
+        }
         if checkCollision() { return }                           // you can still hit a rock while aiming
         if castReach >= castMaxReach { dropCast() }              // auto-drop once the line is fully out
     }
@@ -1130,6 +1135,7 @@ final class GameModel: ObservableObject {
     private func startAim() {
         phase = .casting
         castReach = 0
+        castT = 0
         haptics.play(.cast)
     }
 

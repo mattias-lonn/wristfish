@@ -62,8 +62,9 @@ struct GameCanvas: View {
                                        near: min(1, max(0, fy / model.boatY)))
             }
 
-            // While aiming: the line going out + the aim marker (gold when locked on a fish).
-            if model.phase == .casting {
+            // While aiming: the line going out + the aim marker — only after the rod has whipped
+            // forward (during the wind-up castReach is still 0, so nothing shows yet).
+            if model.phase == .casting && model.castReach > 0 {
                 GameArt.drawLine(ctx, size, from: model.boatX, boatY: model.boatY,
                                  to: model.hookPoint, tension: 0)
                 GameArt.drawAim(ctx, size, at: model.hookPoint, locked: model.castLocked, t: model.elapsed)
@@ -87,7 +88,8 @@ struct GameCanvas: View {
             GameArt.drawBoat(ctx, size, x: model.boatX, boatY: model.boatY,
                              wake: model.wakeTrail, t: model.elapsed, speed: model.boatSpeed,
                              timeOfDay: model.timeOfDay, hull: model.boat.hull, accent: model.boat.accent,
-                             style: model.boat.style)
+                             style: model.boat.style,
+                             casting: model.phase == .casting, castT: model.castT)
 
             // The gull itself flies over the top of everything — straight across, or diving for a fish.
             if model.birdActive {
