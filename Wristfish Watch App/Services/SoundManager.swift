@@ -24,7 +24,7 @@ enum GameSound: String, CaseIterable {
         case .combo:       return 0.32
         case .bite:        return 0.34
         case .plop:        return 0.37
-        case .gull:        return 0.17   // ambient flyby cry (kept gentle)
+        case .gull:        return 0.05   // ambient flyby cry (kept very quiet)
         case .bootBeast:   return 0.40
         case .catchSmall:  return 0.43
         case .perfect:     return 0.48

@@ -25,7 +25,15 @@ final class MusicManager {
     enum Track: String { case menu, gameplay, boss }   // boss = the darker, tense bed for monster fights
 
     /// Base level — kept well under the SFX mix so music never competes with gameplay cues.
-    private let baseVolume: Float = 0.40
+    /// Per-track level — kept well under the SFX mix. The in-game beds sit a touch lower than the menu
+    /// so gameplay cues read clearly over them; boss stays a hair above gameplay (the fight is present).
+    private func baseVolume(_ t: Track) -> Float {
+        switch t {
+        case .menu:     return 0.40
+        case .gameplay: return 0.30
+        case .boss:     return 0.34
+        }
+    }
     private let normalFade: TimeInterval = 0.9         // menu ↔ gameplay
     private let bossFade: TimeInterval = 1.6           // into/out of a monster fight — a slower swell
 
@@ -118,7 +126,7 @@ final class MusicManager {
         guard !suppressed, let p = players[track] else { return }    // their audio wins — stay silent
         try? AVAudioSession.sharedInstance().setActive(true)
         if !p.isPlaying { p.currentTime = 0; p.volume = 0; p.play() }
-        ramp(p, to: baseVolume, duration: dur, pauseAtEnd: false)
+        ramp(p, to: baseVolume(track), duration: dur, pauseAtEnd: false)
     }
 
     /// Fade out and forget the current track (used when leaving all music behind).
@@ -139,7 +147,7 @@ final class MusicManager {
         try? AVAudioSession.sharedInstance().setActive(true)
         p.volume = 0
         p.play()
-        ramp(p, to: baseVolume, duration: normalFade, pauseAtEnd: false)
+        ramp(p, to: baseVolume(t), duration: normalFade, pauseAtEnd: false)
     }
 
     /// The Settings toggle. On → resume the current/menu bed; off → stop everything.

@@ -1506,22 +1506,23 @@ final class GameModel: ObservableObject {
     }
 
     private func spawnRock() {
-        let x = Double.random(in: edge...(1 - edge))
         let roll = Double.random(in: 0...1)
-        if roll < 0.035 {
-            // Very rare: a slow boat wandering the water, steering around the rocks.
-            var o = Obstacle(x: x, y: -0.15, r: 0.052, kind: .boat)
-            o.vx = Double.random(in: 0.06...0.10) * (Bool.random() ? 1 : -1)
-            rocks.append(o)
-        } else if roll < 0.14 {
-            // Rarer: a lighthouse on a skerry, sweeping its beam around.
-            rocks.append(Obstacle(x: x, y: -0.15, r: 0.085, kind: .lighthouse))
-        } else {
-            rocks.append(Obstacle(x: x, y: -0.1, r: Double.random(in: 0.06...0.10), kind: .rock))
+        // Decide what it is (and its size) first, then pick a lane that won't drop it onto an existing
+        // vak — so a fish never ends up under a rock, and no vak ever has to be removed (which made them pop).
+        let y: Double, r: Double, kind: ObstacleKind
+        if roll < 0.035      { y = -0.15; r = 0.052; kind = .boat }         // very rare wandering boat
+        else if roll < 0.14  { y = -0.15; r = 0.085; kind = .lighthouse }   // rarer lighthouse skerry
+        else                 { y = -0.10; r = Double.random(in: 0.06...0.10); kind = .rock }
+
+        var x = Double.random(in: edge...(1 - edge))
+        var tries = 0
+        while !rockSpotOpen(x: x, y: y, r: r) && tries < 8 {     // dodge existing vakar (no popping)
+            x = Double.random(in: edge...(1 - edge)); tries += 1
         }
-        if let o = rocks.last {                          // never leave a vak sitting under a freshly-placed rock
-            hints.removeAll { abs($0.x - o.x) < o.r + 0.09 && abs($0.y - o.y) < o.r + 0.09 }
-        }
+
+        var o = Obstacle(x: x, y: y, r: r, kind: kind)
+        if kind == .boat { o.vx = Double.random(in: 0.06...0.10) * (Bool.random() ? 1 : -1) }  // drifts sideways
+        rocks.append(o)
     }
 
     /// The rare wandering boat: drifts slowly sideways, nudging away from rocks, bouncing off the edges.
@@ -1546,17 +1547,30 @@ final class GameModel: ObservableObject {
 
     private func spawnHint() {
         let deep = Bool.random()
-        // A vak must never appear on a rock. Hints and rocks scroll in lockstep, so a spot that's clear
-        // at spawn stays clear — try a few lanes, and skip this ripple if the top is crowded with rocks.
-        for _ in 0..<10 {
+        // A vak may sit right next to a rock, but never on one. Hints and rocks scroll in lockstep, so a
+        // spot that clears the rocks at spawn stays clear forever — find an open lane, else skip this one.
+        for _ in 0..<8 {
             let x = Double.random(in: 0.16...0.84)
-            if !rockAtSpawnLine(x: x) { hints.append(Hint(x: x, y: -0.08, deep: deep)); return }
+            if vakSpotOpen(x: x, y: -0.08, deep: deep) {
+                hints.append(Hint(x: x, y: -0.08, deep: deep)); return
+            }
         }
     }
 
-    /// Is a rock sitting at the hint spawn line (y ≈ -0.08) near this x? (keeps fish from rising on rocks)
-    private func rockAtSpawnLine(x: Double) -> Bool {
-        rocks.contains { abs($0.x - x) < $0.r + 0.09 && abs($0.y + 0.08) < $0.r + 0.09 }
+    /// A vak's solid core (shadow + glint) radius. The faint outer rings may lap a nearby rock ("near"),
+    /// but this small core must not sit on the rock body ("not in") — so vakar can still hug rocks closely.
+    private func vakCore(_ deep: Bool) -> Double { deep ? 0.04 : 0.026 }
+
+    /// Open spot for a vak: no rock body overlaps its core at (x, y). A circular test (not a box), so the
+    /// exclusion zone is just the rock radius plus the vak's small core — vakar can sit close, not on top.
+    private func vakSpotOpen(x: Double, y: Double, deep: Bool) -> Bool {
+        let core = vakCore(deep)
+        return !rocks.contains { let dx = $0.x - x, dy = $0.y - y, c = $0.r + core; return dx * dx + dy * dy < c * c }
+    }
+
+    /// Open spot for a rock: it won't cover the core of an existing vak (so we never have to delete one).
+    private func rockSpotOpen(x: Double, y: Double, r: Double) -> Bool {
+        return !hints.contains { let dx = $0.x - x, dy = $0.y - y, c = r + vakCore($0.deep); return dx * dx + dy * dy < c * c }
     }
 
     /// Drop any scripted placements whose distance the level has now reached — at their exact x.
