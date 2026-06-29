@@ -7,10 +7,28 @@ import SwiftUI
 
 struct SettingsView: View {
     @State private var haptics = LocalStore.hapticsEnabled
+    @State private var sound = LocalStore.soundEnabled
+    @State private var music = LocalStore.musicEnabled
 
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
+                Toggle("Sound", isOn: $sound)
+                    .font(.callout)
+                    .tint(Sea.teal)
+                    .onChange(of: sound) { _, value in
+                        LocalStore.soundEnabled = value
+                        if value { SoundManager.shared.play(.catchSmall) }   // hear the setting you just enabled
+                    }
+
+                Toggle("Music", isOn: $music)
+                    .font(.callout)
+                    .tint(Sea.teal)
+                    .onChange(of: music) { _, value in
+                        LocalStore.musicEnabled = value
+                        MusicManager.shared.setEnabled(value)                // start/stop the menu bed right away
+                    }
+
                 Toggle("Haptics", isOn: $haptics)
                     .font(.callout)
                     .tint(Sea.teal)

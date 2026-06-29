@@ -16,6 +16,12 @@ struct GameCanvas: View {
                 return
             }
 
+            var ctx = ctx
+            if model.shakeAmp > 0.05 {        // impact shake — jolts the world (HUD stays put)
+                let s = model.shakeAmp, t = model.elapsed
+                ctx.translateBy(x: sin(t * 119) * s, y: cos(t * 97) * s)
+            }
+
             GameArt.drawWater(ctx, size, scroll: model.scroll, timeOfDay: model.timeOfDay)
 
             // Soft cloud shadows drift across the surface, under everything else.

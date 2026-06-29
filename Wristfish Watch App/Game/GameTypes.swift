@@ -24,9 +24,6 @@ enum Phase {
     case gameOver    // trip over
 }
 
-/// A short flick (single tap) reaches shallow ripples; a double tap reaches the deep ones.
-enum CastKind { case short, deep }
-
 /// The fish you can land. Bigger fish = more points, but they fight harder.
 enum FishKind: CaseIterable {
     case herring, mackerel, cod, salmon, tuna, boot

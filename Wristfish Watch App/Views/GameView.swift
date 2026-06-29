@@ -11,11 +11,13 @@ struct GameView: View {
     let onExit: () -> Void
 
     @State private var config: LevelConfig
+    @Environment(\.scenePhase) private var scenePhase
 
     // Staged entrance for the end-of-level card: frosted glass fades in, stars pop one-by-one, then the rest.
     @State private var cardIn = false
     @State private var starsShown = 0
     @State private var winDetailsIn = false
+    @State private var comboScale = 1.0   // one-shot punch when the combo multiplier steps up
 
     init(config: LevelConfig = .freeplay, onExit: @escaping () -> Void) {
         self.onExit = onExit
@@ -123,6 +125,21 @@ struct GameView: View {
         .onChange(of: model.phase) { _, new in
             if new == .gameOver { revealEndCard() }
             else { cardIn = false; starsShown = 0; winDetailsIn = false }
+            switch new {                                     // monster fights get the tense "boss" bed
+            case .kraken, .bootBeast, .sleighRide: MusicManager.shared.play(.boss)
+            case .boating, .casting:               MusicManager.shared.play(.gameplay)
+            default: break                                   // .landed/.gameOver keep whatever's playing
+            }
+        }
+        .onChange(of: model.comboMult) { old, new in
+            if new > old && new >= 2 {                       // streak stepped up → punch the chip
+                comboScale = 1.35
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.45)) { comboScale = 1.0 }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in              // never run the loop (or music) in the background
+            if phase == .active { model.resume(); MusicManager.shared.resume() }
+            else { model.pause(); MusicManager.shared.pause() }
         }
         .onAppear { model.start(config) }
         .onDisappear { model.stop() }
@@ -152,7 +169,7 @@ struct GameView: View {
                             .foregroundStyle(.white.opacity(0.9))
                         Spacer()
                     }
-                    meter(model.objectiveProgress, Sea.teal)
+                    meter(model.objectiveProgress, Sea.teal, eased: true)
                 }
                 .padding(.horizontal, 14).padding(.top, 1)
             }
@@ -168,6 +185,7 @@ struct GameView: View {
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(.black.opacity(0.5), in: Capsule())
                         .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
+                        .scaleEffect(comboScale)
                     }
                     if model.doublePoints {
                         powerChip(systemName: nil, text: "2×", time: model.doublePointsLeft, color: Sea.gold)
@@ -224,7 +242,7 @@ struct GameView: View {
             VStack(spacing: 4) {
                 pill(model.sleighStrain > 0.6 ? "Ease off!" : "Stay on its tail!",
                      model.sleighStrain > 0.6 ? .red : Sea.teal)
-                meter(model.sleighCatchProgress, Sea.gold)                                   // fish tiring
+                meter(model.sleighCatchProgress, Sea.gold, eased: true)                      // fish tiring
                 meter(model.sleighStrain, model.sleighStrain > 0.6 ? .red : Sea.coral)       // line strain
             }
             .padding(.horizontal, 14).padding(.bottom, 6)
@@ -235,7 +253,7 @@ struct GameView: View {
                     pill("Brace yourself…", Sea.coral)               // a hint while it rises
                 } else {
                     if model.krakenJustStarted { pill("Tap to harpoon!", Sea.teal) }
-                    meter(model.krakenDamage, Sea.gold)              // drive-it-off progress
+                    meter(model.krakenDamage, Sea.gold, eased: true) // drive-it-off progress
                 }
             }
             .padding(.horizontal, 28).padding(.bottom, 5)
@@ -244,7 +262,7 @@ struct GameView: View {
             if model.bootBeastRising {
                 pill("The Boot Beast!", Sea.coral).padding(.bottom, 6)   // names the beast while it rises
             } else {
-                meter(model.bootBeastProgress, Sea.gold)                 // slim bar — clear of the dodge zone
+                meter(model.bootBeastProgress, Sea.gold, eased: true)    // slim bar — clear of the dodge zone
                     .padding(.horizontal, 30).padding(.bottom, 5)
             }
 
@@ -321,12 +339,15 @@ struct GameView: View {
             .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
     }
 
-    private func meter(_ value: Double, _ color: Color) -> some View {
+    /// `eased` smooths chunky, step-changing bars (objective, kraken damage, boot bonus). Leave it off
+    /// for the per-frame, timing-critical bars (reel gauge, cast reach, line strain) so they stay snappy.
+    private func meter(_ value: Double, _ color: Color, eased: Bool = false) -> some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(.white.opacity(0.14))
                 Capsule().fill(color)
                     .frame(width: max(2, geo.size.width * min(1, max(0, value))))
+                    .animation(eased ? .spring(response: 0.35, dampingFraction: 0.85) : nil, value: value)
             }
         }
         .frame(height: 5)

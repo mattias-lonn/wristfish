@@ -23,6 +23,8 @@ enum LocalStore {
     // MARK: Keys ------------------------------------------------------------
     private static let bestKey = "wf_fish_best"
     private static let hapticsKey = "wf_fish_haptics"
+    private static let soundKey = "wf_sound"
+    private static let musicKey = "wf_music"
     private static let starsKey = "wf_fish_stars"
     private static let totalFishKey = "wf_total_fish"
     private static let totalScoreKey = "wf_total_score"
@@ -91,6 +93,18 @@ enum LocalStore {
             let cloudHaptics = kvs.bool(forKey: hapticsKey)
             if defaults.object(forKey: hapticsKey) == nil || defaults.bool(forKey: hapticsKey) != cloudHaptics {
                 defaults.set(cloudHaptics, forKey: hapticsKey)
+            }
+        }
+        if kvs.object(forKey: soundKey) != nil {
+            let cloudSound = kvs.bool(forKey: soundKey)
+            if defaults.object(forKey: soundKey) == nil || defaults.bool(forKey: soundKey) != cloudSound {
+                defaults.set(cloudSound, forKey: soundKey)
+            }
+        }
+        if kvs.object(forKey: musicKey) != nil {
+            let cloudMusic = kvs.bool(forKey: musicKey)
+            if defaults.object(forKey: musicKey) == nil || defaults.bool(forKey: musicKey) != cloudMusic {
+                defaults.set(cloudMusic, forKey: musicKey)
             }
         }
 
@@ -174,8 +188,12 @@ enum LocalStore {
         var s = celebratedSet(); s.insert(id); defaults.set(Array(s), forKey: celebratedKey)
     }
 
-    /// The chosen boat id (defaults to 0 = the starter Skiff).
-    static func selectedBoat() -> Int { defaults.integer(forKey: boatKey) }
+    /// The chosen boat id (defaults to 0 = the starter Skiff). Clamped to an unlocked boat so the
+    /// menu highlight and the gameplay boat always agree even if a stored boat is no longer available.
+    static func selectedBoat() -> Int {
+        let id = defaults.integer(forKey: boatKey)
+        return BoatModel.all.first(where: { $0.id == id })?.isUnlocked == true ? id : 0
+    }
     static func setSelectedBoat(_ id: Int) { defaults.set(id, forKey: boatKey); mirror(id, boatKey) }
 
     /// Defaults to ON when never set.
@@ -187,6 +205,31 @@ enum LocalStore {
         set {
             defaults.set(newValue, forKey: hapticsKey)
             kvs.set(newValue, forKey: hapticsKey); kvs.synchronize()
+        }
+    }
+
+    /// Sound effects. Defaults to ON when never set.
+    static var soundEnabled: Bool {
+        get {
+            defaults.object(forKey: soundKey) == nil
+                ? true : defaults.bool(forKey: soundKey)
+        }
+        set {
+            defaults.set(newValue, forKey: soundKey)
+            kvs.set(newValue, forKey: soundKey); kvs.synchronize()
+        }
+    }
+
+    /// Background music. Defaults to OFF — on the watch, silence-in-public is the norm and the music is
+    /// a value-add for players with AirPods; SFX + haptics carry the game on their own.
+    static var musicEnabled: Bool {
+        get {
+            defaults.object(forKey: musicKey) == nil
+                ? false : defaults.bool(forKey: musicKey)
+        }
+        set {
+            defaults.set(newValue, forKey: musicKey)
+            kvs.set(newValue, forKey: musicKey); kvs.synchronize()
         }
     }
 }

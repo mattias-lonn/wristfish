@@ -63,6 +63,7 @@ struct RootView: View {
     private func startGame(_ c: LevelConfig) {
         playConfig = c
         haptics.play(.reel)
+        MusicManager.shared.play(.gameplay)         // crossfade the menu bed into the gameplay bed
         withAnimation(.easeInOut(duration: 0.2)) { playing = true }
     }
 
@@ -111,7 +112,10 @@ struct RootView: View {
             }
         }
         .ignoresSafeArea()
-        .onAppear(perform: runIntro)
+        .onAppear {
+            MusicManager.shared.play(.menu)         // starts the menu bed (no-op unless Music is enabled);
+            runIntro()                              // also crossfades gameplay→menu when returning from a run
+        }
     }
 
     private func runIntro() {

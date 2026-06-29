@@ -124,6 +124,8 @@ final class GameModel: ObservableObject {
     private(set) var elapsed: Double = 0
     private(set) var hasSteered = false              // player has used the Crown at least once this trip
     private var boatingStartElapsed: Double? = nil   // when the boat first became steerable (after the launch)
+    private(set) var shakeAmp = 0.0                  // camera-shake magnitude (pt), kicked by impacts, decays each tick
+    private func shake(_ a: Double) { shakeAmp = max(shakeAmp, a) }
 
     // A lone gull that passes over now and then — and very rarely dives to snatch your catch.
     private(set) var birdActive = false
@@ -133,6 +135,8 @@ final class GameModel: ObservableObject {
     private(set) var birdDiveTargetY = 0.5     // …tracked so the swoop hits it exactly
     private(set) var birdXOffset = 0.0         // horizontal shift after the gull is knocked off course
     private(set) var birdHit = false           // your cast clipped it this pass (once per pass)
+    private var birdCryAt = 0.5                 // progress (0–1) at which it cries — set per pass, well on-screen
+    private var birdCried = false              // it has cried once this pass
     private(set) var feathers: [Feather] = []  // feathers fluttering down from a clipped gull
 
     // Sleigh-ride state (read by the art & HUD).
@@ -493,6 +497,10 @@ final class GameModel: ObservableObject {
         pickaxeChance = config.specials.pickaxe
         sortedScript = config.script.sorted { $0.at < $1.at }
         resetState()
+        startTimer()
+    }
+
+    private func startTimer() {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0 / fps, repeats: true) { [weak self] _ in
             self?.tick()
@@ -501,10 +509,15 @@ final class GameModel: ObservableObject {
 
     func stop() { timer?.invalidate(); timer = nil }
 
+    /// Pause the loop without losing state — for when the app backgrounds (wrist down, a notification)
+    /// so a reel/dodge isn't lost to an interruption. `resume()` picks up exactly where it left off.
+    func pause() { timer?.invalidate(); timer = nil }
+    func resume() { if timer == nil { startTimer() } }
+
     private func resetState() {
         phase = .launching
         boatX = 0.5; boatTargetX = 0.5; scroll = 0; score = 0; displayScore = 0; scoreBumpT = 1; elapsed = 0
-        hasSteered = false; boatingStartElapsed = nil
+        hasSteered = false; boatingStartElapsed = nil; shakeAmp = 0
         cameoQueue = []; cameoBoat = nil; cameoT = 0; cameoY = 1.3; cameoX = 0.5
         checkBoatUnlocks()   // a boat unlocked at the previous run's end gets its cameo as this run begins
         rocks = []; hints = []; leaps = []
@@ -544,6 +557,10 @@ final class GameModel: ObservableObject {
             updateBirdInteraction()                       // line in front slows it / a clip knocks it about
             birdSpeed += (birdSpeedTarget - birdSpeed) * 0.18
             birdT += dt * birdSpeed
+            if !birdCried && birdProgress >= birdCryAt {  // now it's well on-screen → let it cry, once
+                birdCried = true
+                SoundManager.shared.play(.gull)
+            }
             if birdDive {
                 // Lock onto a real fish far ahead just before the swoop — or call it off if none.
                 if !birdCommitted && birdProgress > 0.54 {
@@ -584,6 +601,9 @@ final class GameModel: ObservableObject {
                 birdCommitted = false; birdGrabbed = false; birdDiveHintID = nil
                 birdDiveTargetX = boatX; birdDiveTargetY = boatY - 0.28
                 birdXOffset = 0; birdHit = false
+                // It crosses the screen over progress ~0.13→0.95; cry once well inside that window
+                // (≈0.5s after it enters to ≈0.5s before it leaves), never while still off-screen.
+                birdCried = false; birdCryAt = Double.random(in: 0.22...0.86)
             }
         }
     }
@@ -721,12 +741,15 @@ final class GameModel: ObservableObject {
         elapsed += dt
         if phase != .launching && phase != .gameOver && !levelWon { levelTime += dt }
         if flashTimer > 0 { flashTimer -= dt; if flashTimer <= 0 { flash = ""; flashGold = false } }
-        if doublePointsT > 0 { doublePointsT = max(0, doublePointsT - dt) }   // power-ups tick in real time
-        if rockBreakT > 0 { rockBreakT = max(0, rockBreakT - dt) }
+        if phase != .surfacing && phase != .landed {                          // power-ups freeze behind the
+            if doublePointsT > 0 { doublePointsT = max(0, doublePointsT - dt) } // catch card — you don't lose
+            if rockBreakT > 0 { rockBreakT = max(0, rockBreakT - dt) }          // pickaxe/double-points seconds
+        }                                                                       // while reading what you got
         updateFeathers(dt)                                                    // knocked-loose feathers settle & fade
         if scorePopT < scorePopDuration { scorePopT += dt }                   // the floating "+points" rises & fades
         if harpoonHitT < 0.35 { harpoonHitT += dt }                           // the harpoon hit-burst fades
         if scoreBumpT < scoreBumpDur { scoreBumpT += dt }                     // the score's scale-punch settles
+        shakeAmp = shakeAmp > 0.05 ? shakeAmp * 0.84 : 0                       // camera shake decays out quickly
         if displayScore != Double(score) {                                    // HUD score counts up toward the real total
             displayScore += (Double(score) - displayScore) * 0.28
             if abs(Double(score) - displayScore) < 0.5 { displayScore = Double(score) }
@@ -800,7 +823,8 @@ final class GameModel: ObservableObject {
         cameoY = 1.3                 // just below the screen
         cameoX = min(max(boatX + 0.2, 0.2), 0.8)   // come in a lane over from the player
         showFlash("New boat unlocked\n\(b.name) is now in your harbor", gold: true, duration: 2.6)
-        haptics.play(.catchBig)
+        SoundManager.shared.play(.unlock)          // a little fanfare
+        haptics.play(.catchBig, sound: false)
     }
 
     private func tickCameo(_ dt: Double) {
@@ -1120,7 +1144,8 @@ final class GameModel: ObservableObject {
         if !krakenEmerged {                          // the moment it breaks the surface
             krakenEmerged = true
             krakenNextStrike = 0.5
-            haptics.play(.crash)
+            SoundManager.shared.play(.kraken)        // a low groan from the deep
+            haptics.play(.crash, sound: false)
         }
 
         for i in tentacles.indices { tentacles[i].age += dt }
@@ -1160,6 +1185,7 @@ final class GameModel: ObservableObject {
             krakenHP = max(0, krakenHP - harpoonEyeDmg)
             award(harpoonEyePts * scoreMultiplier)
             harpoonHitX = h.x; harpoonHitY = h.y; harpoonHitT = 0
+            shake(2.5)
             haptics.play(.tug)
             return true
         } else if abs(h.x - cx) < harpoonBodyHalf {
@@ -1214,7 +1240,11 @@ final class GameModel: ObservableObject {
         advanceWorld(dt, speedMul: 0.4)
 
         guard bootBeastT >= bootBeastIntro else { return }   // still rising
-        if !bootBeastRevealed { bootBeastRevealed = true; haptics.play(.bite) }   // it breaks the surface
+        if !bootBeastRevealed {                                                   // it breaks the surface
+            bootBeastRevealed = true
+            SoundManager.shared.play(.bootBeast)                                  // a comedic boing
+            haptics.play(.bite, sound: false)
+        }
 
         // Lob boots, faster as it goes.
         bootThrowNext -= dt
@@ -1232,6 +1262,7 @@ final class GameModel: ObservableObject {
             bootThrows[i].resolved = true
             if abs(boatX - bootThrows[i].x) < bootThrowHitR {
                 bootBeastBonus = max(0, bootBeastBonus - bootHitPenalty)
+                shake(4)
                 haptics.play(.miss)
             } else {
                 bootBeastBonus += bootDodgePts
@@ -1266,6 +1297,7 @@ final class GameModel: ObservableObject {
 
     /// Drop the line where the cast has reached and see what's there.
     private func dropCast() {
+        SoundManager.shared.play(.plop)          // the lure hits the water
         let castY = boatY - castReach
         let target = hints
             .filter { abs($0.x - boatX) < castTol && abs($0.y - castY) < depthTol }
@@ -1332,6 +1364,7 @@ final class GameModel: ObservableObject {
 
         // A scoring fish extends the streak; an old boot lands but neither builds nor breaks it.
         let scoring = kind.points > 0
+        let prevCombo = comboMult
         if scoring { streak += 1; comboMult = min(maxCombo, streak) }
         if kind == .boot {                                   // boots pile up → summon the Boot Beast
             bootsThisTrip += 1
@@ -1364,7 +1397,13 @@ final class GameModel: ObservableObject {
         surfaceCaught = true
         surfaceT = 0
         phase = .surfacing           // splash/flash transition → the result card
-        haptics.play(kind.points >= 90 || comboMult >= 3 || perfect ? .catchBig : .catchSmall)
+        if scoring && comboMult > prevCombo && comboMult >= 2 { SoundManager.shared.play(.combo) }   // streak stepped up
+        if perfect {
+            SoundManager.shared.play(.perfect)            // a clean reel rings out
+            haptics.play(.catchBig, sound: false)         // (the perfect chime replaces the generic catch sound)
+        } else {
+            haptics.play(kind.points >= 90 || comboMult >= 3 ? .catchBig : .catchSmall)
+        }
         checkBoatUnlocks()           // a fish/boot lifetime tally may have crossed a boat threshold
         checkObjective()
     }
@@ -1418,6 +1457,7 @@ final class GameModel: ObservableObject {
             LocalStore.recordBest(score)
         }
         LocalStore.recordRun(score)         // single-run best (any mode) → the golden boat
+        shake(9)
         showFlash("MINE!")
         haptics.play(.crash)
     }
@@ -1452,6 +1492,7 @@ final class GameModel: ObservableObject {
             LocalStore.recordBest(score)
         }
         LocalStore.recordRun(score)         // single-run best (any mode) → the golden boat
+        shake(7)
         haptics.play(.crash)
         // The timer keeps running so the splash can animate; tickCrash flips to .gameOver.
     }
@@ -1478,6 +1519,9 @@ final class GameModel: ObservableObject {
         } else {
             rocks.append(Obstacle(x: x, y: -0.1, r: Double.random(in: 0.06...0.10), kind: .rock))
         }
+        if let o = rocks.last {                          // never leave a vak sitting under a freshly-placed rock
+            hints.removeAll { abs($0.x - o.x) < o.r + 0.09 && abs($0.y - o.y) < o.r + 0.09 }
+        }
     }
 
     /// The rare wandering boat: drifts slowly sideways, nudging away from rocks, bouncing off the edges.
@@ -1501,9 +1545,18 @@ final class GameModel: ObservableObject {
     }
 
     private func spawnHint() {
-        hints.append(Hint(x: Double.random(in: 0.16...0.84),
-                          y: -0.08,
-                          deep: Bool.random()))
+        let deep = Bool.random()
+        // A vak must never appear on a rock. Hints and rocks scroll in lockstep, so a spot that's clear
+        // at spawn stays clear — try a few lanes, and skip this ripple if the top is crowded with rocks.
+        for _ in 0..<10 {
+            let x = Double.random(in: 0.16...0.84)
+            if !rockAtSpawnLine(x: x) { hints.append(Hint(x: x, y: -0.08, deep: deep)); return }
+        }
+    }
+
+    /// Is a rock sitting at the hint spawn line (y ≈ -0.08) near this x? (keeps fish from rising on rocks)
+    private func rockAtSpawnLine(x: Double) -> Bool {
+        rocks.contains { abs($0.x - x) < $0.r + 0.09 && abs($0.y + 0.08) < $0.r + 0.09 }
     }
 
     /// Drop any scripted placements whose distance the level has now reached — at their exact x.
