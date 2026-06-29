@@ -518,7 +518,8 @@ enum GameArt {
     /// and a little outboard at the transom. Drawn centred at `c`, bow up, banked by `bank`.
     private static func boatBody(_ ctx: GraphicsContext, at c: CGPoint, hw: Double, hh: Double,
                                  bank: Double, hull: Color, accent: Color = Sea.coral,
-                                 style: BoatStyle = .skiff, motor: Bool = true) {
+                                 style: BoatStyle = .skiff, motor: Bool = true,
+                                 shiny: Bool = false, t: Double = 0) {
         let deck = Color(red: 0.82, green: 0.70, blue: 0.50)   // sun-bleached wooden gunwale/deck
         let well = Color(red: 0.55, green: 0.43, blue: 0.30)   // shaded open interior
         let seat = Color(red: 0.71, green: 0.57, blue: 0.39)   // thwart seats
@@ -552,6 +553,24 @@ enum GameArt {
         g.fill(shell, with: .color(hull))
         g.stroke(shell, with: .color(.black.opacity(0.22)), lineWidth: max(0.8, hw * 0.05))
 
+        // A golden hull glints: a soft highlight sweeps across, plus a warm glaze pulse.
+        if shiny {
+            var gg = g
+            gg.clip(to: shell)
+            let sweep = sin(t * 1.3) * hw * 1.6, bw = hw * 0.5, skew = hh * 0.55
+            var band = Path()
+            band.move(to: CGPoint(x: sweep - bw - skew, y: -hh * 1.4))
+            band.addLine(to: CGPoint(x: sweep - bw + skew, y: hh * 1.4))
+            band.addLine(to: CGPoint(x: sweep + bw + skew, y: hh * 1.4))
+            band.addLine(to: CGPoint(x: sweep + bw - skew, y: -hh * 1.4))
+            band.closeSubpath()
+            gg.fill(band, with: .linearGradient(
+                Gradient(colors: [.white.opacity(0), .white.opacity(0.55), .white.opacity(0)]),
+                startPoint: CGPoint(x: sweep - bw, y: 0), endPoint: CGPoint(x: sweep + bw, y: 0)))
+            let glaze = 0.5 + 0.5 * sin(t * 2.2)
+            gg.fill(shell, with: .color(Color(red: 1, green: 0.95, blue: 0.7).opacity(0.06 + 0.07 * glaze)))
+        }
+
         // Wooden deck / gunwale surface (inset hull) — leaves a painted hull band around the rim.
         var dg = g
         dg.translateBy(x: 0, y: hh * 0.015)
@@ -571,6 +590,23 @@ enum GameArt {
 
         // A light rim catching the sun along the hull edge.
         g.stroke(shell, with: .color(.white.opacity(0.28)), lineWidth: max(0.7, hw * 0.05))
+
+        // A twinkling sparkle riding the bow of a golden hull.
+        if shiny {
+            let tw = max(0, sin(t * 2.5))
+            let sx = hw * 0.22, sy = -hh * 0.5, r = hw * (0.16 + 0.16 * tw)
+            var star = Path()
+            star.move(to: CGPoint(x: sx, y: sy - r))
+            star.addLine(to: CGPoint(x: sx + r * 0.2, y: sy - r * 0.2))
+            star.addLine(to: CGPoint(x: sx + r, y: sy))
+            star.addLine(to: CGPoint(x: sx + r * 0.2, y: sy + r * 0.2))
+            star.addLine(to: CGPoint(x: sx, y: sy + r))
+            star.addLine(to: CGPoint(x: sx - r * 0.2, y: sy + r * 0.2))
+            star.addLine(to: CGPoint(x: sx - r, y: sy))
+            star.addLine(to: CGPoint(x: sx - r * 0.2, y: sy - r * 0.2))
+            star.closeSubpath()
+            g.fill(star, with: .color(.white.opacity(0.4 + 0.5 * tw)))
+        }
     }
 
     /// A sailboat's billowing mainsail — set aft (behind the angler) and drawn behind the hull.
@@ -722,7 +758,7 @@ enum GameArt {
     static func drawBoat(_ ctx: GraphicsContext, _ s: CGSize, x: Double, boatY: Double,
                          wake: [Double], t: Double, speed: Double = 1, timeOfDay tod: Double = 0,
                          hull: Color = Sea.gold, accent: Color = Sea.coral, scale: Double = 1,
-                         style: BoatStyle = .skiff, angler: Bool = true,
+                         style: BoatStyle = .skiff, angler: Bool = true, shiny: Bool = false,
                          casting: Bool = false, castT: Double = 0) {
         let cx = x * s.width
         let cy = boatY * s.height
@@ -766,7 +802,7 @@ enum GameArt {
 
         // Shared hull / deck / cockpit look (no motor — this one's worked by rod).
         boatBody(ctx, at: CGPoint(x: cx, y: cy), hw: hw, hh: hh, bank: bank,
-                 hull: hull, accent: accent, style: style, motor: false)
+                 hull: hull, accent: accent, style: style, motor: false, shiny: shiny, t: t)
 
         // White foam churning right behind the stern — only once under way.
         c.fill(Path(ellipseIn: CGRect(x: -hw * 0.5, y: hh * 0.86, width: hw, height: hh * 0.26)),
@@ -916,6 +952,32 @@ enum GameArt {
             g.fill(Path(ellipseIn: CGRect(x: L * 0.40, y: -L * 0.08, width: L * 0.20, height: L * 0.16)),
                    with: .color(shCol))
         }
+    }
+
+    /// A newly-unlocked boat doing a celebratory lap: the boat (gameplay-sized) racing up the screen,
+    /// flying a little gold flag with its name from a short mast.
+    static func drawCameoBoat(_ ctx: GraphicsContext, _ s: CGSize, boat: BoatModel,
+                              x: Double, y: Double, t: Double, name: String) {
+        let w = s.width, h = s.height
+        _ = name
+        let trail = (0..<12).map { i in x + sin((t - Double(i) * 0.05) * 4) * 0.012 }   // speedy wake
+        drawBoat(ctx, s, x: x, boatY: y, wake: trail, t: t, speed: 1,
+                 hull: boat.hull, accent: boat.accent, scale: 1, style: boat.style, angler: false, shiny: boat.shiny)
+
+        // A short mast flying a small fluttering gold pennant (the words are in the on-screen flash).
+        let cx = x * w
+        let baseY = (y - 0.03) * h, topY = (y - 0.135) * h
+        ctx.stroke(Path { p in p.move(to: CGPoint(x: cx, y: baseY)); p.addLine(to: CGPoint(x: cx, y: topY)) },
+                   with: .color(Color(white: 0.85)), lineWidth: 1.5)
+        let wav = sin(t * 9) * 3
+        var pennant = Path()
+        pennant.move(to: CGPoint(x: cx, y: topY))
+        pennant.addQuadCurve(to: CGPoint(x: cx + 18, y: topY + 5 + wav),
+                             control: CGPoint(x: cx + 10, y: topY + 1 + wav * 0.5))
+        pennant.addLine(to: CGPoint(x: cx, y: topY + 9))
+        pennant.closeSubpath()
+        ctx.fill(pennant, with: .color(Sea.gold))
+        ctx.fill(Path(ellipseIn: CGRect(x: cx - 2, y: topY - 2, width: 4, height: 4)), with: .color(.white))  // mast cap
     }
 
     /// A single gull crossing the screen diagonally, bottom-to-top. On a `dive` pass it leaves that

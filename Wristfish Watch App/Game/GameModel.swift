@@ -122,6 +122,8 @@ final class GameModel: ObservableObject {
     private var scoreBumpT = 1.0                 // ≥ scoreBumpDur → inactive (one-shot scale punch on a gain)
     private let scoreBumpDur = 0.32
     private(set) var elapsed: Double = 0
+    private(set) var hasSteered = false              // player has used the Crown at least once this trip
+    private var boatingStartElapsed: Double? = nil   // when the boat first became steerable (after the launch)
 
     // A lone gull that passes over now and then — and very rarely dives to snatch your catch.
     private(set) var birdActive = false
@@ -212,6 +214,7 @@ final class GameModel: ObservableObject {
 
     // Transient banner ("Nothing biting", "It got away!", …)
     private(set) var flash = ""
+    private(set) var flashGold = false        // reward-style flash (gold, centered) vs the usual coral
     private var flashTimer = 0.0
 
     // MARK: Private state
@@ -275,6 +278,19 @@ final class GameModel: ObservableObject {
 
     // The chosen (cosmetic) boat for this trip.
     private(set) var boat = BoatModel.selected
+
+    // Boat-unlock cameo: a newly-unlocked boat races past, weaving through the obstacles, flying a
+    // pennant — celebrated in-world. "Already celebrated" is tracked in LocalStore so a boat unlocked at
+    // a run's end (stars / single-run score) gets its lap at the start of the next run.
+    private var cameoQueue: [BoatModel] = []
+    private(set) var cameoBoat: BoatModel? = nil
+    private(set) var cameoX = 0.5
+    private(set) var cameoY = 1.3
+    private var cameoT = 0.0
+    private var cameoBoost = 1.0                       // eased speed multiplier — guns it when cornered
+    private let cameoDuration = 5.0                    // leisurely lap (lower = faster)
+    var cameoActive: Bool { cameoBoat != nil }
+    var cameoName: String { cameoBoat?.name ?? "" }
 
     // Objective tracking (campaign).
     private(set) var fishCount = 0              // scoring fish landed this level
@@ -359,6 +375,7 @@ final class GameModel: ObservableObject {
         pendingWin = false
         levelStars = computeStars()
         LocalStore.recordStars(level: config.id, stars: levelStars)
+        LocalStore.recordRun(score)         // single-run best → the golden boat
         flash = ""; flashTimer = 0          // clear any lingering banner so the card is clean
         haptics.play(.catchBig)
         phase = .gameOver
@@ -390,6 +407,14 @@ final class GameModel: ObservableObject {
     /// How far into night we are (0 day … 1 deep night) — matches the visual GameArt.nightAmount.
     /// Drives the night fish bias in rollFish (the night leans toward bigger / deep fish).
     var nightLevel: Double { max(0, min(1, (timeOfDay - 0.6) / 0.4)) }
+
+    /// Show the "Crown to steer" nudge only once input is actually live — for the first ~4s of boating,
+    /// before the player has steered and before they've scored. (Not during the launch, when the Crown
+    /// is ignored, which previously made the hint look broken.)
+    var showSteerHint: Bool {
+        guard phase == .boating, !hasSteered, score == 0, let t0 = boatingStartElapsed else { return false }
+        return elapsed - t0 < 4
+    }
 
     /// How far the gull is across its flyover (0…1) — read by the art.
     var birdProgress: Double { min(1, birdT / birdDuration) }
@@ -479,6 +504,9 @@ final class GameModel: ObservableObject {
     private func resetState() {
         phase = .launching
         boatX = 0.5; boatTargetX = 0.5; scroll = 0; score = 0; displayScore = 0; scoreBumpT = 1; elapsed = 0
+        hasSteered = false; boatingStartElapsed = nil
+        cameoQueue = []; cameoBoat = nil; cameoT = 0; cameoY = 1.3; cameoX = 0.5
+        checkBoatUnlocks()   // a boat unlocked at the previous run's end gets its cameo as this run begins
         rocks = []; hints = []; leaps = []
         leapSpawn = Double.random(in: 3...7)
         hooked = nil; reelProgress = 0; marker = 0.5; zoneCenter = 0.5
@@ -649,6 +677,7 @@ final class GameModel: ObservableObject {
     func crown(delta: Double) {
         switch phase {
         case .boating, .sleighRide, .kraken, .bootBeast:
+            if delta != 0 { hasSteered = true }
             boatTargetX = min(max(boatTargetX + delta * steerGain, edge), 1 - edge)
         case .reeling:
             marker = min(max(marker + delta * markerGain, 0), 1)   // move your gauge marker
@@ -692,7 +721,7 @@ final class GameModel: ObservableObject {
         let dt = 1.0 / fps
         elapsed += dt
         if phase != .launching && phase != .gameOver && !levelWon { levelTime += dt }
-        if flashTimer > 0 { flashTimer -= dt; if flashTimer <= 0 { flash = "" } }
+        if flashTimer > 0 { flashTimer -= dt; if flashTimer <= 0 { flash = ""; flashGold = false } }
         if doublePointsT > 0 { doublePointsT = max(0, doublePointsT - dt) }   // power-ups tick in real time
         if rockBreakT > 0 { rockBreakT = max(0, rockBreakT - dt) }
         updateFeathers(dt)                                                    // knocked-loose feathers settle & fade
@@ -730,6 +759,12 @@ final class GameModel: ObservableObject {
         case .gameOver:  if autoSail { tickShowcase(dt) }
         }
 
+        // A newly-unlocked boat does a cameo lap — only while the top-down world is on screen.
+        if isWorldPhase {
+            if cameoBoat == nil, !cameoQueue.isEmpty { startCameo(cameoQueue.removeFirst()) }
+            if cameoBoat != nil { tickCameo(dt) }
+        }
+
         // Campaign: claim the win at a calm moment (for finish-line levels that's the crossing itself).
         checkObjective()
         if pendingWin && !levelWon && (phase == .boating || phase == .casting || phase == .landed) {
@@ -737,6 +772,70 @@ final class GameModel: ObservableObject {
         }
         if pendingBootBeast && phase == .boating { startBootBeast() }   // a couple of boots → the beast
         objectWillChange.send()
+    }
+
+    // MARK: Boat-unlock cameo -----------------------------------------------
+
+    private var isWorldPhase: Bool {
+        switch phase {
+        case .boating, .casting, .sleighRide, .kraken, .bootBeast, .landed: return true
+        default: return false
+        }
+    }
+
+    /// Queue a cameo lap for any unlocked boat that hasn't been celebrated yet (mid-run crossings and
+    /// run-end unlocks alike). Marking happens immediately so it only ever laps once.
+    private func checkBoatUnlocks() {
+        for b in BoatModel.all where b.isUnlocked && !LocalStore.isCelebrated(b.id) {
+            LocalStore.markCelebrated(b.id)
+            cameoQueue.append(b)
+        }
+    }
+
+    private func startCameo(_ b: BoatModel) {
+        cameoBoat = b
+        cameoT = 0
+        cameoBoost = 1.0
+        cameoY = 1.3                 // just below the screen
+        cameoX = min(max(boatX + 0.2, 0.2), 0.8)   // come in a lane over from the player
+        showFlash("New boat unlocked\n\(b.name) is now in your harbor", gold: true, duration: 2.6)
+        haptics.play(.catchBig)
+    }
+
+    private func tickCameo(_ dt: Double) {
+        guard cameoBoat != nil else { return }
+        cameoT += dt
+
+        // --- Steer: a smooth avoidance field. Every nearby rock and the player's boat exert a soft
+        // sideways push that ramps up with proximity — no on/off target snapping, so the path is smooth.
+        var push = 0.0
+        func repel(x ox: Double, y oy: Double, radius r: Double, strength: Double) {
+            let vIn = 1 - min(1, abs(oy - cameoY) / (0.32 + r))      // 0…1 vertical nearness
+            guard vIn > 0 else { return }
+            let dx = cameoX - ox
+            let hIn = 1 - min(1, abs(dx) / (0.24 + r))               // 0…1 horizontal nearness
+            guard hIn > 0 else { return }
+            let dir = abs(dx) < 0.03 ? (ox <= 0.5 ? 1.0 : -1.0)      // head-on: peel toward open water
+                                     : (dx >= 0 ? 1.0 : -1.0)
+            push += dir * vIn * hIn * hIn * strength                 // hIn² → gentle far, firmer up close
+        }
+        for o in rocks { repel(x: o.x, y: o.y, radius: o.r, strength: 0.55) }
+        repel(x: boatX, y: boatY, radius: 0.05, strength: 0.7)       // dodge the player's boat too
+
+        let targetX = min(max(0.5 + sin(cameoT * 1.3) * 0.16 + push, 0.1), 0.9)
+        cameoX += (targetX - cameoX) * 0.16                          // gentle ease → smooth weaving
+
+        // --- Climb: steady, but gun it when pinned against the player (no room, or they charge us) ---
+        var cornered = false
+        if abs(boatY - cameoY) < 0.14 && abs(cameoX - boatX) < 0.12 {
+            let away = cameoX >= boatX ? 1.0 : -1.0
+            let pinnedToEdge = cameoX + away * 0.12 < 0.1 || cameoX + away * 0.12 > 0.9
+            let charging = (boatTargetX - boatX) * away > 0
+            cornered = pinnedToEdge || charging
+        }
+        cameoBoost += ((cornered ? 2.6 : 1.0) - cameoBoost) * 0.18
+        cameoY -= (1.6 / cameoDuration) * cameoBoost * dt            // up the screen, overtaking the world
+        if cameoY < -0.35 { cameoBoat = nil }                       // sailed off the top
     }
 
     private func tickBoating(_ dt: Double) {
@@ -779,6 +878,8 @@ final class GameModel: ObservableObject {
             shatters.append(Shatter(x: hit.x, y: hit.y, r: hit.r, seed: hit.seed))
             rocks.removeAll { $0.id == hit.id }
             award(rockSmashPts * scoreMultiplier)          // cleaving a rock pays a little
+            LocalStore.addRock()                           // lifetime tally (the Stonebreaker boat)
+            checkBoatUnlocks()                             // 50 rocks → cameo
             haptics.play(.tug)
             return false
         }
@@ -843,7 +944,10 @@ final class GameModel: ObservableObject {
         // The wake only builds once the shore has slid off-screen, so nothing splashes on the beach.
         let cleared = max(0, min(1, (harborScroll - 0.18) / 0.30))
         boatSpeed = cleared * cleared * (3 - 2 * cleared)
-        if harborScroll >= launchClearDist { phase = .boating }
+        if harborScroll >= launchClearDist {
+            phase = .boating
+            if boatingStartElapsed == nil { boatingStartElapsed = elapsed }   // start the steer-hint window now (input is live)
+        }
     }
 
     private func tickHooking(_ dt: Double) {
@@ -1260,6 +1364,7 @@ final class GameModel: ObservableObject {
         surfaceT = 0
         phase = .surfacing           // splash/flash transition → the result card
         haptics.play(kind.points >= 90 || comboMult >= 3 || perfect ? .catchBig : .catchSmall)
+        checkBoatUnlocks()           // a fish/boot lifetime tally may have crossed a boat threshold
         checkObjective()
     }
 
@@ -1273,6 +1378,7 @@ final class GameModel: ObservableObject {
         score += pts
         scoreBumpT = 0                       // kick the scale punch
         LocalStore.addScore(pts)
+        checkBoatUnlocks()                   // a score boat may have just crossed its threshold
     }
 
     /// Reeled a special all the way up: claim the chest/pickaxe — or set off the mine.
@@ -1296,6 +1402,7 @@ final class GameModel: ObservableObject {
         surfaceCaught = true
         surfaceT = 0
         phase = .surfacing
+        checkBoatUnlocks()           // a chest lifetime tally may have crossed a boat threshold
     }
 
     /// The hooked mine reaches the boat and detonates — game over.
@@ -1309,6 +1416,7 @@ final class GameModel: ObservableObject {
             isBest = score > 0 && score > LocalStore.best()
             LocalStore.recordBest(score)
         }
+        LocalStore.recordRun(score)         // single-run best (any mode) → the golden boat
         showFlash("MINE!")
         haptics.play(.crash)
     }
@@ -1342,6 +1450,7 @@ final class GameModel: ObservableObject {
             isBest = score > 0 && score > LocalStore.best()
             LocalStore.recordBest(score)
         }
+        LocalStore.recordRun(score)         // single-run best (any mode) → the golden boat
         haptics.play(.crash)
         // The timer keeps running so the splash can animate; tickCrash flips to .gameOver.
     }
@@ -1419,5 +1528,7 @@ final class GameModel: ObservableObject {
         return dx * dx + dy * dy < rr * rr
     }
 
-    private func showFlash(_ text: String) { flash = text; flashTimer = 1.1 }
+    private func showFlash(_ text: String, gold: Bool = false, duration: Double = 1.1) {
+        flash = text; flashGold = gold; flashTimer = duration
+    }
 }

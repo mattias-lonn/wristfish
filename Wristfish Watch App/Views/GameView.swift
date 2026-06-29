@@ -11,8 +11,6 @@ struct GameView: View {
     let onExit: () -> Void
 
     @State private var config: LevelConfig
-    @State private var crown = 0.0
-    @FocusState private var focused: Bool
 
     // Staged entrance for the end-of-level card: frosted glass fades in, stars pop one-by-one, then the rest.
     @State private var cardIn = false
@@ -121,16 +119,12 @@ struct GameView: View {
                     .opacity(cardIn ? 1 : 0)
             }
         }
-        .focusable(true)
-        .focused($focused)
-        .digitalCrownRotation($crown, from: -1_000_000, through: 1_000_000, by: 0.5,
-                              sensitivity: .high, isContinuous: true, isHapticFeedbackEnabled: false)
-        .onChange(of: crown) { old, new in model.crown(delta: new - old) }
+        .playerInput(model)                       // platform input → model.crown(delta:)/tap() (watch: Crown, iOS: drag)
         .onChange(of: model.phase) { _, new in
             if new == .gameOver { revealEndCard() }
             else { cardIn = false; starsShown = 0; winDetailsIn = false }
         }
-        .onAppear { focused = true; model.start(config) }
+        .onAppear { model.start(config) }
         .onDisappear { model.stop() }
     }
 
@@ -189,9 +183,10 @@ struct GameView: View {
             if !model.flash.isEmpty && model.phase != .kraken && model.phase != .bootBeast {   // don't cover the monster
                 Text(model.flash)
                     .font(.caption.bold())
-                    .foregroundStyle(Sea.coral)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(.black.opacity(0.5), in: Capsule())
+                    .foregroundStyle(model.flashGold ? Sea.gold : Sea.coral)   // reward = gold, else coral
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .padding(.top, 2)
             }
 
@@ -256,7 +251,7 @@ struct GameView: View {
         case .boating:
             if model.targetAhead {
                 pill("Tap to cast", Sea.gold).padding(.bottom, 6)
-            } else if model.elapsed < 4 && model.score == 0 {
+            } else if model.showSteerHint {
                 pill("Crown to steer", .white).padding(.bottom, 6)
             }
 
@@ -492,4 +487,5 @@ struct GameView: View {
             }
         }
     }
+
 }

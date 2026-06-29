@@ -108,8 +108,6 @@ struct RootView: View {
                 }
                 .scrollIndicators(.hidden)
                 .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in scrollY = y }
-                // No edge blur while resting at the top — it only fades in once you've scrolled a bit.
-                .scrollEdgeEffectHidden(scrollY < 30)
             }
         }
         .ignoresSafeArea()
@@ -172,7 +170,7 @@ struct RootView: View {
                 let trail = (0..<14).map { i in 0.5 + sin((t - Double(i) * 0.05) * 0.6) * 0.03 }
                 GameArt.drawBoat(ctx, size, x: 0.5 + sway, boatY: boatRestY + bob,
                                  wake: trail, t: t, speed: strength, hull: boat.hull, accent: boat.accent,
-                                 scale: boatScale, style: boat.style)
+                                 scale: boatScale, style: boat.style, shiny: boat.shiny)
             }
         }
         // Held (boatStartY − boatRestY)·H below the screen until raised, then animated up to 0.
@@ -221,9 +219,9 @@ struct RootView: View {
                             .foregroundStyle(.white)
                             .fixedSize(horizontal: false, vertical: true)   // wrap, never truncate
                     }
-                    Text(lvl.subtitle)
+                    Text(unlocked ? lvl.subtitle : "Clear level \(lvl.id - 1) to unlock")
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(unlocked ? .white.opacity(0.6) : Sea.coral.opacity(0.95))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
@@ -279,9 +277,9 @@ struct RootView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 13, style: .continuous).fill(Sea.waterGradient)
                     Canvas { ctx, size in            // no wake/foam/angler: a clean portrait of the hull
-                        GameArt.drawBoat(ctx, size, x: 0.5, boatY: 0.53, wake: [], t: 0,
+                        GameArt.drawBoat(ctx, size, x: 0.5, boatY: 0.53, wake: [], t: 0.6,
                                          speed: 0, hull: b.hull, accent: b.accent, scale: 2.45,
-                                         style: b.style, angler: false)
+                                         style: b.style, angler: false, shiny: b.shiny)
                     }
                     if !unlocked {
                         RoundedRectangle(cornerRadius: 13, style: .continuous).fill(.black.opacity(0.5))

@@ -41,39 +41,52 @@ enum BoatUnlock {
     case score(Int)
     case boots(Int)
     case chests(Int)
+    case rocks(Int)
+    case stars(Int)
+    case bestRun(Int)
 
     var label: String {
         switch self {
-        case .none:          return "Starter boat"
-        case .fish(let n):   return "Catch \(n) fish"
-        case .score(let n):  return "Earn \(n) points"
-        case .boots(let n):  return "Catch \(n) boots"
-        case .chests(let n): return "Catch \(n) chests"
+        case .none:           return "Starter boat"
+        case .fish(let n):    return "Catch \(n) fish"
+        case .score(let n):   return "Earn \(n) points"
+        case .boots(let n):   return "Catch \(n) boots"
+        case .chests(let n):  return "Catch \(n) chests"
+        case .rocks(let n):   return "Smash \(n) rocks"
+        case .stars(let n):   return "Earn \(n) stars"
+        case .bestRun(let n): return "Score \(n) in one run"
         }
     }
     /// A compact metric word for tight tiles.
     var metric: String {
         switch self {
-        case .none:   return ""
-        case .fish:   return "Fish"
-        case .score:  return "Pts"
-        case .boots:  return "Boots"
-        case .chests: return "Chests"
+        case .none:    return ""
+        case .fish:    return "Fish"
+        case .score:   return "Pts"
+        case .boots:   return "Boots"
+        case .chests:  return "Chests"
+        case .rocks:   return "Rocks"
+        case .stars:   return "Stars"
+        case .bestRun: return "Run"
         }
     }
     var current: Int {
         switch self {
-        case .none:   return 1
-        case .fish:   return LocalStore.totalFish()
-        case .score:  return LocalStore.totalScore()
-        case .boots:  return LocalStore.totalBoots()
-        case .chests: return LocalStore.totalChests()
+        case .none:    return 1
+        case .fish:    return LocalStore.totalFish()
+        case .score:   return LocalStore.totalScore()
+        case .boots:   return LocalStore.totalBoots()
+        case .chests:  return LocalStore.totalChests()
+        case .rocks:   return LocalStore.totalRocks()
+        case .stars:   return LocalStore.totalStars()
+        case .bestRun: return LocalStore.bestRun()
         }
     }
     var target: Int {
         switch self {
         case .none: return 1
-        case .fish(let n), .score(let n), .boots(let n), .chests(let n): return n
+        case .fish(let n), .score(let n), .boots(let n), .chests(let n),
+             .rocks(let n), .stars(let n), .bestRun(let n): return n
         }
     }
     var met: Bool { current >= target }
@@ -90,14 +103,9 @@ struct BoatModel: Identifiable {
     let accent: Color          // trim / the angler's gear
     let style: BoatStyle
     let unlock: BoatUnlock
+    var shiny: Bool = false     // a glinting golden hull (the trophy boat)
 
-    var isUnlocked: Bool {
-        #if DEBUG
-        return true             // dev: all boats pickable so we can see every skin
-        #else
-        return unlock.met
-        #endif
-    }
+    var isUnlocked: Bool { unlock.met }   // earned by lifetime stats — gated for real (no dev override)
 
     static let all: [BoatModel] = [
         .init(id: 0, name: "Skiff",          hull: Sea.gold,                                  accent: Sea.coral,                                 style: .skiff,     unlock: .none),
@@ -109,6 +117,9 @@ struct BoatModel: Identifiable {
         .init(id: 6, name: "Flagship",       hull: Color(red: 0.15, green: 0.16, blue: 0.20), accent: Sea.gold,                                  style: .yacht,     unlock: .score(150_000)),
         .init(id: 7, name: "Old Boot",       hull: Color(red: 0.46, green: 0.29, blue: 0.16), accent: Color(red: 0.26, green: 0.16, blue: 0.10), style: .boot,      unlock: .boots(100)),
         .init(id: 8, name: "Treasure Barge", hull: Color(red: 0.40, green: 0.27, blue: 0.16), accent: Sea.gold,                                  style: .barge,     unlock: .chests(100)),
+        .init(id: 9, name: "Stonebreaker",   hull: Color(red: 0.46, green: 0.49, blue: 0.54), accent: Color(red: 0.95, green: 0.78, blue: 0.30), style: .trawler,   unlock: .rocks(50)),
+        .init(id: 10, name: "Champion",      hull: Color(red: 0.20, green: 0.24, blue: 0.40), accent: Sea.gold,                                  style: .yacht,     unlock: .stars(25)),
+        .init(id: 11, name: "Midas",         hull: Color(red: 0.95, green: 0.78, blue: 0.28), accent: Color(red: 1.0, green: 0.93, blue: 0.6),   style: .speedboat, unlock: .bestRun(50_000), shiny: true),
     ]
 
     static var selected: BoatModel {

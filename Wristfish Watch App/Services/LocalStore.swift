@@ -28,10 +28,14 @@ enum LocalStore {
     private static let totalScoreKey = "wf_total_score"
     private static let totalBootsKey = "wf_total_boots"
     private static let totalChestsKey = "wf_total_chests"
+    private static let totalRocksKey = "wf_total_rocks"
+    private static let bestRunKey = "wf_best_run"            // highest score in a single run (any mode)
     private static let boatKey = "wf_boat"
+    private static let celebratedKey = "wf_celebrated_boats" // boats whose unlock cameo has already played (local)
 
     /// Counters that only ever grow — reconciled across devices by taking the larger value.
-    private static let maxIntKeys = [bestKey, totalFishKey, totalScoreKey, totalBootsKey, totalChestsKey]
+    private static let maxIntKeys = [bestKey, totalFishKey, totalScoreKey, totalBootsKey, totalChestsKey,
+                                     totalRocksKey, bestRunKey]
 
     /// Posted on the main thread after an iCloud change has been merged in, so views can refresh.
     static let didChange = Notification.Name("LocalStoreDidChange")
@@ -125,14 +129,10 @@ enum LocalStore {
         }
     }
 
-    /// Level 1 is always open; later levels unlock once the previous one is cleared.
-    /// In dev builds everything is unlocked so any level can be tested.
+    /// Level 1 is always open; later levels unlock once the previous one is cleared. Gated for real
+    /// (no dev override), so the lock experience matches what players see in Debug and Release alike.
     static func isUnlocked(level id: Int) -> Bool {
-        #if DEBUG
-        return true
-        #else
-        return id <= 1 || stars(level: id - 1) > 0
-        #endif
+        id <= 1 || stars(level: id - 1) > 0
     }
 
     /// Total stars across the campaign (for the menu).
@@ -143,13 +143,35 @@ enum LocalStore {
     static func totalScore() -> Int { defaults.integer(forKey: totalScoreKey) }
     static func totalBoots() -> Int { defaults.integer(forKey: totalBootsKey) }
     static func totalChests() -> Int { defaults.integer(forKey: totalChestsKey) }
+    static func totalRocks() -> Int { defaults.integer(forKey: totalRocksKey) }
+    /// Highest score reached in a single run (any mode) — drives the golden boat.
+    static func bestRun() -> Int { defaults.integer(forKey: bestRunKey) }
 
     static func addFish(_ n: Int = 1)  { let v = totalFish() + n;   defaults.set(v, forKey: totalFishKey);   mirror(v, totalFishKey) }
     static func addBoot(_ n: Int = 1)  { let v = totalBoots() + n;  defaults.set(v, forKey: totalBootsKey);  mirror(v, totalBootsKey) }
     static func addChest(_ n: Int = 1) { let v = totalChests() + n; defaults.set(v, forKey: totalChestsKey); mirror(v, totalChestsKey) }
+    static func addRock(_ n: Int = 1)  { let v = totalRocks() + n;  defaults.set(v, forKey: totalRocksKey);  mirror(v, totalRocksKey) }
     static func addScore(_ n: Int) {
         guard n > 0 else { return }
         let v = totalScore() + n; defaults.set(v, forKey: totalScoreKey); mirror(v, totalScoreKey)
+    }
+    /// Record a finished run's score; keeps the all-time single-run best.
+    static func recordRun(_ score: Int) {
+        if score > bestRun() { defaults.set(score, forKey: bestRunKey); mirror(score, bestRunKey) }
+    }
+
+    // MARK: Boat-unlock cameo bookkeeping ----------------------------------
+    /// Boats whose unlock cameo has already played. Lazily seeded with everything currently unlocked,
+    /// so existing progress never re-celebrates — only genuinely new unlocks get a lap. (Local-only.)
+    private static func celebratedSet() -> Set<Int> {
+        if let arr = defaults.array(forKey: celebratedKey) as? [Int] { return Set(arr) }
+        let initial = Set(BoatModel.all.filter { $0.isUnlocked }.map { $0.id })
+        defaults.set(Array(initial), forKey: celebratedKey)
+        return initial
+    }
+    static func isCelebrated(_ id: Int) -> Bool { celebratedSet().contains(id) }
+    static func markCelebrated(_ id: Int) {
+        var s = celebratedSet(); s.insert(id); defaults.set(Array(s), forKey: celebratedKey)
     }
 
     /// The chosen boat id (defaults to 0 = the starter Skiff).

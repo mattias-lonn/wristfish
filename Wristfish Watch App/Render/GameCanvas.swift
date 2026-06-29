@@ -88,8 +88,14 @@ struct GameCanvas: View {
             GameArt.drawBoat(ctx, size, x: model.boatX, boatY: model.boatY,
                              wake: model.wakeTrail, t: model.elapsed, speed: model.boatSpeed,
                              timeOfDay: model.timeOfDay, hull: model.boat.hull, accent: model.boat.accent,
-                             style: model.boat.style,
+                             style: model.boat.style, shiny: model.boat.shiny,
                              casting: model.phase == .casting, castT: model.castT)
+
+            // A newly-unlocked boat doing its celebratory lap, flying its name.
+            if let cameo = model.cameoBoat {
+                GameArt.drawCameoBoat(ctx, size, boat: cameo, x: model.cameoX, y: model.cameoY,
+                                      t: model.elapsed, name: model.cameoName)
+            }
 
             // The gull itself flies over the top of everything — straight across, or diving for a fish.
             if model.birdActive {
