@@ -254,10 +254,20 @@ struct RootView: View {
 
     private let boatGrid = [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)]
 
+    /// Unlocked boats first (in their natural order), then the locked ones ordered by how close they
+    /// are to unlocking (nearest first).
+    private var sortedBoats: [BoatModel] {
+        BoatModel.all.sorted { a, b in
+            if a.isUnlocked != b.isUnlocked { return a.isUnlocked }
+            if a.isUnlocked { return a.id < b.id }
+            return a.unlock.progress > b.unlock.progress
+        }
+    }
+
     private var boats: some View {
         ScrollView {
             LazyVGrid(columns: boatGrid, spacing: 8) {
-                ForEach(BoatModel.all) { b in boatCard(b) }
+                ForEach(sortedBoats) { b in boatCard(b) }
             }
             .padding(.horizontal, 9).padding(.bottom, 8)
         }

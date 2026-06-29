@@ -205,17 +205,17 @@ struct FishTable {
         shallow: [.init(kind: .boot, weight: 10), .init(kind: .herring, weight: 45),
                   .init(kind: .mackerel, weight: 33), .init(kind: .cod, weight: 12)],
         deep:    [.init(kind: .boot, weight: 8), .init(kind: .cod, weight: 27),
-                  .init(kind: .salmon, weight: 35), .init(kind: .tuna, weight: 30)])
+                  .init(kind: .salmon, weight: 35), .init(kind: .tuna, weight: 16)])
     /// Deep water, big fish — for the open-sea / trophy levels.
     static let bluewater = FishTable(
         shallow: [.init(kind: .mackerel, weight: 40), .init(kind: .cod, weight: 40), .init(kind: .salmon, weight: 20)],
-        deep:    [.init(kind: .cod, weight: 18), .init(kind: .salmon, weight: 40), .init(kind: .tuna, weight: 42)])
+        deep:    [.init(kind: .cod, weight: 18), .init(kind: .salmon, weight: 40), .init(kind: .tuna, weight: 26)])
     /// Freeplay (Open Water): like `standard`, but tuna are scarcer so the tow is a rarer treat.
     static let openWater = FishTable(
         shallow: [.init(kind: .boot, weight: 10), .init(kind: .herring, weight: 45),
                   .init(kind: .mackerel, weight: 33), .init(kind: .cod, weight: 12)],
         deep:    [.init(kind: .boot, weight: 8), .init(kind: .cod, weight: 35),
-                  .init(kind: .salmon, weight: 45), .init(kind: .tuna, weight: 12)])
+                  .init(kind: .salmon, weight: 45), .init(kind: .tuna, weight: 6)])
 }
 
 /// How often a hooked catch is a special instead of a fish.

@@ -366,13 +366,10 @@ struct GameView: View {
                     }
                 }
             }
-            Text("Tap to keep fishing")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 18).padding(.vertical, 12)
         .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 16))
-        .onTapGesture { model.tap() }
+        .allowsHitTesting(false)        // purely informational; it auto-continues — no tap target here
     }
 
     @ViewBuilder private var gameOverCard: some View {

@@ -90,6 +90,8 @@ enum BoatUnlock {
         }
     }
     var met: Bool { current >= target }
+    /// How close to unlocking, 0…1 (for ordering the locked boats by nearness).
+    var progress: Double { target <= 0 ? 1 : min(1, Double(current) / Double(target)) }
 }
 
 /// Distinct hull silhouettes so each boat reads differently, not just recoloured.

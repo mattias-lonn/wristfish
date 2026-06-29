@@ -692,8 +692,7 @@ final class GameModel: ObservableObject {
         case .casting:    if castReach > 0 { dropCast() }   // drop once the line is actually out (past the wind-up)
         case .sleighRide: sleighHaul()       // yank to tire it faster — but it strains the line
         case .kraken:     fireHarpoon()      // throw a harpoon straight up at the monster
-        case .landed:     phase = .boating   // continue the trip
-        default:          break              // reeling / gameOver: ignore
+        default:          break              // reeling / landed / gameOver: ignore (the catch card auto-continues)
         }
     }
 
@@ -776,9 +775,11 @@ final class GameModel: ObservableObject {
 
     // MARK: Boat-unlock cameo -----------------------------------------------
 
+    /// Where a boat-unlock cameo may run. Excludes `.landed` so a cameo never overlaps the "what you
+    /// caught" card — it waits until that card clears and play resumes.
     private var isWorldPhase: Bool {
         switch phase {
-        case .boating, .casting, .sleighRide, .kraken, .bootBeast, .landed: return true
+        case .boating, .casting, .sleighRide, .kraken, .bootBeast: return true
         default: return false
         }
     }
@@ -1321,8 +1322,8 @@ final class GameModel: ObservableObject {
         let n = nightLevel
         // The night shift leans toward trophies: a chance to draw on the deep (big-fish) table even on a
         // shallow cast, plus a bias toward the larger end of whichever table.
-        let useDeep = deep || (n > 0.15 && Double.random(in: 0...1) < n * 0.4)
-        return config.fish.roll(deep: useDeep, Double.random(in: 0...1), bigBias: n * 1.1)
+        let useDeep = deep || (n > 0.15 && Double.random(in: 0...1) < n * 0.25)
+        return config.fish.roll(deep: useDeep, Double.random(in: 0...1), bigBias: n * 0.55)
     }
 
     private func land() {
