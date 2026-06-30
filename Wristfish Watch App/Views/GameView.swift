@@ -5,6 +5,9 @@
 //
 
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 struct GameView: View {
     @StateObject private var model = GameModel()
@@ -122,6 +125,11 @@ struct GameView: View {
             }
         }
         .playerInput(model)                       // platform input → model.crown(delta:)/tap() (watch: Crown, iOS: drag)
+        .background(GeometryReader { geo in       // feed the real screen shape to the model (collision hit box)
+            Color.clear.onChange(of: geo.size, initial: true) { _, s in
+                if s.width > 0 { model.renderAspect = s.height / s.width }
+            }
+        })
         .onChange(of: model.phase) { _, new in
             if new == .gameOver { revealEndCard() }
             else { cardIn = false; starsShown = 0; winDetailsIn = false }
@@ -147,6 +155,31 @@ struct GameView: View {
 
     // MARK: HUD -------------------------------------------------------------
 
+    /// Top inset for the score/HUD. On the watch it sits level with the clock (16). On iPhone the
+    /// full-screen canvas collapses the safe area, so we read the real top inset (Dynamic Island / notch /
+    /// SE all differ) and drop the score just below the status bar.
+    private var hudTopInset: CGFloat {
+        #if os(iOS)
+        let top = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.top }
+            .max() ?? 47
+        return top + 4
+        #else
+        return 16
+        #endif
+    }
+
+    /// Bottom prompt/meter placement. On the watch we span the round screen and pin the prompt ~20px from
+    /// the actual bottom edge (the bottom safe-area inset otherwise pushes it up, above the boat). On iPhone
+    /// we keep respecting the home-indicator safe area.
+    #if os(watchOS)
+    private let promptBottomInset: CGFloat = 14
+    private let hudIgnoreEdges: Edge.Set = .all
+    #else
+    private let promptBottomInset: CGFloat = 0
+    private let hudIgnoreEdges: Edge.Set = [.top]
+    #endif
+
     private var hud: some View {
         VStack {
             HStack {
@@ -155,11 +188,13 @@ struct GameView: View {
                     .monospacedDigit()
                     .foregroundStyle(Sea.gold)
                     .shadow(color: .black.opacity(0.7), radius: 2, y: 1)
+                    .padding(.horizontal, 8).padding(.vertical, 2)
+                    .background(.black.opacity(0.22), in: Capsule())   // legible on any view (e.g. the bright reeling surface)
                     .scaleEffect(model.scoreBumpScale, anchor: .leading)
                 Spacer()
             }
             .padding(.horizontal, 14)
-            .padding(.top, 16)                      // sits level with the watch time
+            .padding(.top, hudTopInset)             // watch: level with the clock · iPhone: below the status bar
 
             if model.isCampaign && showObjective {
                 VStack(alignment: .leading, spacing: 2) {
@@ -210,8 +245,9 @@ struct GameView: View {
 
             Spacer()
             bottomBar
+                .padding(.bottom, promptBottomInset)
         }
-        .ignoresSafeArea(edges: .top)
+        .ignoresSafeArea(edges: hudIgnoreEdges)
         .allowsHitTesting(false)
     }
 
@@ -270,7 +306,7 @@ struct GameView: View {
             if model.targetAhead {
                 pill("Tap to cast", Sea.gold).padding(.bottom, 6)
             } else if model.showSteerHint {
-                pill("Crown to steer", .white).padding(.bottom, 6)
+                pill(Controls.steerHint, .white).padding(.bottom, 6)
             }
 
         default:

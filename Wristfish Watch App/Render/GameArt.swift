@@ -17,6 +17,12 @@ enum GameArt {
         CGPoint(x: x * s.width, y: y * s.height)
     }
 
+    /// A vertical "size" unit locked to the Apple Watch's aspect ratio. Object SHAPES (the boat hull,
+    /// rod, wake length, …) size by this so they never stretch when the screen is taller than the watch
+    /// (the iPhone fills the full, tall screen). Positions still use s.height. On the watch this exactly
+    /// equals s.height (205×251), so the watch look is unchanged.
+    private static func vUnit(_ s: CGSize) -> Double { s.width * (251.0 / 205.0) }
+
     // MARK: Time of day ------------------------------------------------------
 
     private static func mix(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * t }
@@ -271,7 +277,7 @@ enum GameArt {
         for i in 0..<5 {
             let a = -Double.pi * 0.9 + Double(i) / 4 * Double.pi * 0.8
             let d = r * 1.2
-            let dx = c.x + cos(a) * d, dy = c.y + sin(a) * d - prog * 0.012 * s.height
+            let dx = c.x + cos(a) * d, dy = c.y + sin(a) * d - prog * 0.012 * vUnit(s)
             let sz = max(1, 3 * (1 - prog))
             ctx.fill(Path(ellipseIn: CGRect(x: dx - sz / 2, y: dy - sz / 2, width: sz, height: sz)),
                      with: .color(Sea.foam.opacity(1 - prog)))
@@ -282,7 +288,7 @@ enum GameArt {
     static func drawLeap(_ ctx: GraphicsContext, _ s: CGSize, _ l: Leap, dur: Double) {
         let p = min(1, l.age / dur)
         let base = CGPoint(x: l.x * s.width, y: l.y * s.height)
-        let arcW = 0.055 * s.width, arcH = 0.065 * s.height
+        let arcW = 0.055 * s.width, arcH = 0.065 * vUnit(s)   // leap height width-locked
         let pos = CGPoint(x: base.x + l.dir * arcW * p, y: base.y - arcH * sin(p * .pi))
         let entry = CGPoint(x: base.x + l.dir * arcW, y: base.y)
         let heading = atan2(-arcH * .pi * cos(p * .pi), l.dir * arcW)
@@ -763,15 +769,17 @@ enum GameArt {
         let cx = x * s.width
         let cy = boatY * s.height
         let hw = 0.066 * s.width * scale
-        let hh = 0.085 * s.height * scale
+        let hh = 0.085 * vUnit(s) * scale          // width-locked → boat keeps its shape on a tall iPhone
 
         // Bank gently into the turn (from how the boat's been moving lately — a smooth debounce).
         let recent = wake.first ?? x
         let older = wake.count > 5 ? wake[5] : (wake.last ?? x)
         let bank = max(-0.3, min(0.3, (recent - older) * 9))
 
-        // A living, curving wake behind (below) the boat — fades in as the boat gets up to speed.
-        drawWake(ctx, s, stern: CGPoint(x: cx, y: cy + hh * 0.9), wake: wake, t: t, strength: speed,
+        // A living, curving wake behind (below) the boat — fades in as the boat gets up to speed. Its
+        // start tucks up under the stern (drawn before the hull) so the wake reads as coming from
+        // behind the boat, with no gap below it.
+        drawWake(ctx, s, stern: CGPoint(x: cx, y: cy + hh * 0.74), wake: wake, t: t, strength: speed,
                  night: nightAmount(tod))
 
         var c = ctx
@@ -804,17 +812,19 @@ enum GameArt {
         boatBody(ctx, at: CGPoint(x: cx, y: cy), hw: hw, hh: hh, bank: bank,
                  hull: hull, accent: accent, style: style, motor: false, shiny: shiny, t: t)
 
-        // White foam churning right behind the stern — only once under way.
-        c.fill(Path(ellipseIn: CGRect(x: -hw * 0.5, y: hh * 0.86, width: hw, height: hh * 0.26)),
-               with: .color(Sea.foam.opacity(0.5 * speed)))
+        // White foam churning right behind the stern — narrow & tapered (not a flat bar) so the
+        // wake reads as starting from a point. Only once under way.
+        let sternFoam = Sea.foam.opacity(0.5 * speed)
+        c.fill(Path(ellipseIn: CGRect(x: -hw * 0.32, y: hh * 0.82, width: hw * 0.64, height: hh * 0.18)), with: .color(sternFoam))
+        c.fill(Path(ellipseIn: CGRect(x: -hw * 0.16, y: hh * 0.90, width: hw * 0.32, height: hh * 0.15)), with: .color(sternFoam))
 
         // The angler sitting in the cockpit well + the rod. While casting he winds the rod back,
         // then whips it forward and the line flies out over the bow.
         if angler {
             // Rod poses (boat-local): rest forward · wound back · whipped forward.
-            let restTip = CGPoint(x: 0, y: -0.055 * s.height), restCtrl = CGPoint(x: hw * 0.16, y: -hh * 0.45)
+            let restTip = CGPoint(x: 0, y: -0.055 * vUnit(s)), restCtrl = CGPoint(x: hw * 0.16, y: -hh * 0.45)
             let backTip = CGPoint(x: hw * 0.72, y: hh * 0.66), backCtrl = CGPoint(x: hw * 0.55, y: hh * 0.22)
-            let castTip = CGPoint(x: -hw * 0.10, y: -0.062 * s.height), castCtrl = CGPoint(x: -hw * 0.10, y: -hh * 0.5)
+            let castTip = CGPoint(x: -hw * 0.10, y: -0.062 * vUnit(s)), castCtrl = CGPoint(x: -hw * 0.10, y: -hh * 0.5)
             var tip = restTip, ctrl = restCtrl, lean = 0.0
             if casting {
                 let wind = 0.22, whip = 0.40, settle = 0.58       // mirrors GameModel.castWindup
@@ -828,15 +838,16 @@ enum GameArt {
                     let u = smooth((castT - whip) / (settle - whip)); tip = lerpP(castTip, restTip, u); ctrl = lerpP(castCtrl, restCtrl, u)
                 }
             }
-            // Body + head (lean forward slightly during the whip).
-            c.fill(Path(ellipseIn: CGRect(x: -hw * 0.26, y: -hh * 0.06 + lean, width: hw * 0.52, height: hw * 0.52)),
-                   with: .color(accent))
-            c.fill(Path(ellipseIn: CGRect(x: -hw * 0.13, y: -hh * 0.14 + lean, width: hw * 0.26, height: hw * 0.26)),
-                   with: .color(Color(red: 0.93, green: 0.80, blue: 0.66)))           // head
+            // The rod is drawn first so it sits BEHIND the angler (he holds it; it rises past him).
             var rod = Path()
             rod.move(to: CGPoint(x: hw * 0.12, y: -hh * 0.02))
             rod.addQuadCurve(to: tip, control: ctrl)
             c.stroke(rod, with: .color(Color(red: 0.30, green: 0.22, blue: 0.15)), lineWidth: 1.8)
+            // Body + head on top (lean forward slightly during the whip).
+            c.fill(Path(ellipseIn: CGRect(x: -hw * 0.26, y: -hh * 0.06 + lean, width: hw * 0.52, height: hw * 0.52)),
+                   with: .color(accent))
+            c.fill(Path(ellipseIn: CGRect(x: -hw * 0.13, y: -hh * 0.14 + lean, width: hw * 0.26, height: hw * 0.26)),
+                   with: .color(Color(red: 0.93, green: 0.80, blue: 0.66)))           // head
         }
     }
 
@@ -851,7 +862,7 @@ enum GameArt {
                                  t: Double, strength: Double, night: Double = 0) {
         guard wake.count > 3, strength > 0.02 else { return }
         let w = s.width
-        let dy = 0.024 * s.height
+        let dy = 0.024 * vUnit(s)
         let n = wake.count
         let wakeBlue = Color(red: 0.62, green: 0.84, blue: 0.97)
         let glow = Sea.teal                                        // bioluminescent trail after dark
@@ -864,7 +875,8 @@ enum GameArt {
                 let cx = wake[i] * w + side * (0.012 + Double(i) * 0.006) * w
                           + sin(Double(i) * 0.5 + t * 3) * 0.003 * w
                 let cy = stern.y + Double(i) * dy
-                let hw = (0.045 * pow(1 - f, 0.75) + 0.004) * w        // wide near the boat, tapering away
+                let nearTaper = min(1, f / 0.16)                       // start as a point at the stern → no blunt, flat top
+                let hw = (0.045 * pow(1 - f, 0.75) + 0.004) * w * nearTaper
                 core.append(CGPoint(x: cx, y: cy))
                 topEdge.append(CGPoint(x: cx - hw, y: cy))
                 botEdge.append(CGPoint(x: cx + hw, y: cy))
@@ -1093,7 +1105,7 @@ enum GameArt {
         let cx = w * 0.5 + sway
         let cy = (-0.10 + 0.23 * es) * h             // climbs into view
         let scale = 0.6 + 0.4 * es
-        let bw = 0.52 * w * scale, bh = 0.34 * h * scale
+        let bw = 0.52 * w * scale, bh = 0.34 * vUnit(s) * scale   // width-locked height → no stretch on iPhone
         let a = es
         let bodyTop = Color(red: 0.34, green: 0.15, blue: 0.44)   // lit upper mantle
         let bodyDark = Color(red: 0.11, green: 0.04, blue: 0.20)  // shadowed underside
@@ -1185,14 +1197,14 @@ enum GameArt {
         let w = s.width, h = s.height
         for hp in harpoons {
             let x = hp.x * w, y = hp.y * h
-            let tail = y + 0.075 * h
+            let tail = y + 0.075 * vUnit(s)
             // shaft
             var shaft = Path(); shaft.move(to: CGPoint(x: x, y: tail)); shaft.addLine(to: CGPoint(x: x, y: y))
             ctx.stroke(shaft, with: .color(Color(red: 0.45, green: 0.32, blue: 0.20)), lineWidth: 2.4)
             ctx.stroke(shaft, with: .color(Sea.gold.opacity(0.6)), lineWidth: 0.8)
             // barbed steel head
             var head = Path()
-            head.move(to: CGPoint(x: x, y: y - 0.022 * h))
+            head.move(to: CGPoint(x: x, y: y - 0.022 * vUnit(s)))
             head.addLine(to: CGPoint(x: x - 4, y: y + 2))
             head.addLine(to: CGPoint(x: x + 4, y: y + 2))
             head.closeSubpath()
@@ -1225,7 +1237,7 @@ enum GameArt {
 
     private static func drawTentacle(_ ctx: GraphicsContext, _ s: CGSize, x: Double, age: Double, seed: Int) {
         let w = s.width, h = s.height
-        let strikeY = 0.74
+        let strikePx = 0.80 * h - 0.06 * vUnit(s)   // strike at the boat's deck — gap width-locked so it lands the same on watch & iPhone
         let cx = x * w
 
         var ext = 0.0
@@ -1234,7 +1246,7 @@ enum GameArt {
             let tp = age / tentTele
             let rr = (0.035 + 0.05 * tp) * w
             let warn = 0.5 + 0.5 * sin(age * 22)
-            let cy = strikeY * h
+            let cy = strikePx
             ctx.stroke(Path(ellipseIn: CGRect(x: cx - rr, y: cy - rr * 0.55, width: rr * 2, height: rr * 1.1)),
                        with: .color(Color.red.opacity(0.45 + 0.45 * warn)), lineWidth: 2)
             ctx.fill(Path(ellipseIn: CGRect(x: cx - rr * 0.45, y: cy - rr * 0.28, width: rr * 0.9, height: rr * 0.55)),
@@ -1250,7 +1262,7 @@ enum GameArt {
         guard ext > 0.05 else { return }
 
         let baseY = 1.14 * h
-        let tipY = (1.14 + (strikeY - 1.14) * ext) * h
+        let tipY = baseY + (strikePx - baseY) * ext
         let segs = 11
         let phase = Double(seed % 100) * 0.1
         let tcol = Color(red: 0.40, green: 0.18, blue: 0.48)
@@ -1330,7 +1342,7 @@ enum GameArt {
         guard es > 0.02 else { return }
         let cx = w * 0.5 + sin(t * 1.2) * 0.02 * w
         let cy = (-0.04 + 0.17 * es) * h
-        let bw = 0.44 * w * (0.7 + 0.3 * es), bh = 0.27 * h * (0.7 + 0.3 * es)
+        let bw = 0.44 * w * (0.7 + 0.3 * es), bh = 0.27 * vUnit(s) * (0.7 + 0.3 * es)   // width-locked height
         let bodyLit = Color(red: 0.37, green: 0.49, blue: 0.28)     // sunlit mossy green
         let bodyDark = Color(red: 0.19, green: 0.29, blue: 0.15)
         let weed = Color(red: 0.16, green: 0.40, blue: 0.22)
@@ -1421,22 +1433,22 @@ enum GameArt {
     /// Boots being lobbed at you — a warning ring, then a tumbling boot that lands with a splash.
     static func drawBootThrows(_ ctx: GraphicsContext, _ s: CGSize, throws bts: [BootThrow]) {
         let w = s.width, h = s.height
-        let landY = 0.78
+        let landPx = 0.80 * h - 0.02 * vUnit(s)   // boots land at the boat — gap width-locked (same on watch & iPhone)
         for b in bts {
             let cx = b.x * w
             if b.age < bootTele {
                 let tp = b.age / bootTele
                 let rr = (0.035 + 0.05 * tp) * w
                 let warn = 0.5 + 0.5 * sin(b.age * 22)
-                ctx.stroke(Path(ellipseIn: CGRect(x: cx - rr, y: landY * h - rr * 0.55, width: rr * 2, height: rr * 1.1)),
+                ctx.stroke(Path(ellipseIn: CGRect(x: cx - rr, y: landPx - rr * 0.55, width: rr * 2, height: rr * 1.1)),
                            with: .color(Color.red.opacity(0.4 + 0.4 * warn)), lineWidth: 2)
             } else {
                 let f = min(1, (b.age - bootTele) / bootDrop)
-                let by = (0.18 + (landY - 0.18) * f) * h
+                let by = 0.18 * h + (landPx - 0.18 * h) * f
                 drawBootShape(ctx, at: CGPoint(x: cx, y: by), size: 0.06 * w, rot: b.age * 7)
                 if f >= 1 {
                     let rr = 0.05 * w
-                    ctx.stroke(Path(ellipseIn: CGRect(x: cx - rr, y: landY * h - rr * 0.4, width: rr * 2, height: rr * 0.8)),
+                    ctx.stroke(Path(ellipseIn: CGRect(x: cx - rr, y: landPx - rr * 0.4, width: rr * 2, height: rr * 0.8)),
                                with: .color(Sea.foam.opacity(0.5)), lineWidth: 2)
                 }
             }
@@ -1568,11 +1580,11 @@ enum GameArt {
         let w = s.width, h = s.height
         guard y > -0.04, y < 1.06 else { return }
         let cy = y * h
-        let band = max(10.0, 0.052 * h)
+        let band = max(10.0, 0.052 * vUnit(s))
         let cols = 9
         let cellW = w / Double(cols)
         let rh = band / 2
-        func wob(_ c: Int) -> Double { sin(Double(c) * 0.7 + t * 2.2) * (0.012 * h) }
+        func wob(_ c: Int) -> Double { sin(Double(c) * 0.7 + t * 2.2) * (0.012 * vUnit(s)) }
 
         // Soft glow on the water, stronger as the line closes in on the boat.
         ctx.fill(Path(CGRect(x: 0, y: cy - band, width: w, height: band * 2)),
@@ -1617,7 +1629,7 @@ enum GameArt {
             let flutter = sin(t * 6 + side * 2) * 0.012 * w
             var flag = Path()
             flag.move(to: CGPoint(x: px, y: topY))
-            flag.addLine(to: CGPoint(x: px + fld * 0.075 * w + flutter, y: topY + 0.012 * h))
+            flag.addLine(to: CGPoint(x: px + fld * 0.075 * w + flutter, y: topY + 0.012 * vUnit(s)))
             flag.addLine(to: CGPoint(x: px, y: topY + 0.028 * h))
             flag.closeSubpath()
             ctx.fill(flag, with: .color(Sea.coral.opacity(0.95)))
@@ -1690,7 +1702,7 @@ enum GameArt {
         let grass = Color(red: 0.47, green: 0.59, blue: 0.37)
         let grassDark = Color(red: 0.35, green: 0.47, blue: 0.27)
         let baseY = (0.84 + scroll) * h                 // wavy waterline, slides down as you leave
-        let amp = 0.013 * h, steps = 16
+        let amp = 0.013 * vUnit(s), steps = 16
         if baseY < h + amp {                            // only while any shore is on-screen
             func shoreFill(_ topY: Double, _ ph: Double) -> Path {
                 var p = Path()
@@ -1748,16 +1760,30 @@ enum GameArt {
         // Long pier down the left — spans the screen (and a bit beyond) so it reads as long.
         let pierX = 0.15 * w, pierW = 0.13 * w
         let top = (-0.1 + scroll) * h, bot = (1.25 + scroll) * h
-        ctx.fill(Path(roundedRect: CGRect(x: pierX, y: top, width: pierW, height: bot - top), cornerRadius: 4),
-                 with: .color(wood))
+        let pierRect = CGRect(x: pierX, y: top, width: pierW, height: bot - top)
+
+        // Soft shadow cast on the water to the right (light from the upper-left) — lifts the pier off the
+        // flat surface so it reads as raised, not painted on. A few offset layers make a soft edge.
+        for i in 0..<3 {
+            let dx = 0.010 * w * (0.7 + Double(i) * 1.2)
+            ctx.fill(Path(roundedRect: pierRect.offsetBy(dx: dx, dy: 0.010 * w), cornerRadius: 5),
+                     with: .color(.black.opacity(0.055 - Double(i) * 0.017)))   // just a hint of shadow
+        }
+
+        // Deck — a cross-width gradient (lit left → shadowed right) so it looks like a raised plank surface.
+        ctx.fill(Path(roundedRect: pierRect, cornerRadius: 4),
+                 with: .linearGradient(Gradient(colors: [wood, woodDark]),
+                                       startPoint: CGPoint(x: pierX, y: top), endPoint: CGPoint(x: pierX + pierW, y: top)))
         var py = top                                    // planks down the pier
         while py < bot {
             var ln = Path(); ln.move(to: CGPoint(x: pierX, y: py)); ln.addLine(to: CGPoint(x: pierX + pierW, y: py))
             ctx.stroke(ln, with: .color(woodDark.opacity(0.6)), lineWidth: 1)
-            py += 0.07 * h
+            py += 0.07 * vUnit(s)
         }
-        ctx.fill(Path(CGRect(x: pierX + pierW - 2, y: top, width: 2, height: bot - top)),
-                 with: .color(.white.opacity(0.12)))    // edge highlight
+        ctx.fill(Path(CGRect(x: pierX, y: top, width: 2, height: bot - top)),
+                 with: .color(.white.opacity(0.18)))            // lit edge (left)
+        ctx.fill(Path(CGRect(x: pierX + pierW - 2.5, y: top, width: 2.5, height: bot - top)),
+                 with: .color(woodDark.opacity(0.9)))           // shadowed edge (right) → reads as thickness
         for k in 0..<6 {                                // mooring posts on the water side
             let postY = (-0.05 + Double(k) * 0.26 + scroll) * h
             ctx.fill(Path(CGRect(x: pierX + pierW + 0.015 * w, y: postY, width: 0.02 * w, height: 0.05 * h)),
@@ -1777,7 +1803,7 @@ enum GameArt {
     }
 
     private static func miniBoat(_ ctx: GraphicsContext, _ s: CGSize, x: Double, y: Double, color: Color) {
-        boatBody(ctx, at: CGPoint(x: x, y: y), hw: 0.032 * s.width, hh: 0.043 * s.height,
+        boatBody(ctx, at: CGPoint(x: x, y: y), hw: 0.032 * s.width, hh: 0.043 * vUnit(s),
                  bank: 0, hull: color)
     }
 
@@ -1815,7 +1841,7 @@ enum GameArt {
             let a = Double(i) / Double(n) * 2 * .pi
             let d = rr * (0.7 + 0.3 * sin(a * 3))
             let px = c.x + cos(a) * d
-            let py = c.y + sin(a) * d * 0.7 - p * 0.04 * s.height
+            let py = c.y + sin(a) * d * 0.7 - p * 0.04 * vUnit(s)
             let sz = max(1.5, 5 * fade)
             ctx.fill(Path(ellipseIn: CGRect(x: px - sz / 2, y: py - sz / 2, width: sz, height: sz)),
                      with: .color(Sea.foam.opacity(fade)))
@@ -1917,13 +1943,16 @@ enum GameArt {
         ctx.fill(Path(ellipseIn: CGRect(x: 0.835 * w, y: 0.875 * h, width: 0.04 * w, height: 0.04 * w)),
                  with: .color(Color(white: 0.72)))
 
-        // Line rod-tip → fish mouth (white holding, coral slipping) + surface entry ripple.
-        var line = Path(); line.move(to: tip)
-        line.addQuadCurve(to: mouth, control: CGPoint(x: (tip.x + mouth.x) / 2 + 4, y: (tip.y + mouth.y) / 2))
-        let lineCol: Color = model.hookedSpecial == .mine ? .red : (inZone ? .white.opacity(0.95) : Sea.coral)
-        ctx.stroke(line, with: .color(lineCol), lineWidth: 1.4)
-        ctx.stroke(Path(ellipseIn: CGRect(x: mouth.x - 12, y: surfaceY - 4, width: 24, height: 9)),
-                   with: .color(Sea.foam.opacity(0.35)), lineWidth: 1)
+        // Line rod-tip → fish mouth (white holding, coral slipping) + surface entry ripple. Skipped on a
+        // successful land: the fish bursts from the splash, so there's no taut line running into the deep.
+        if !landing {
+            var line = Path(); line.move(to: tip)
+            line.addQuadCurve(to: mouth, control: CGPoint(x: (tip.x + mouth.x) / 2 + 4, y: (tip.y + mouth.y) / 2))
+            let lineCol: Color = model.hookedSpecial == .mine ? .red : (inZone ? .white.opacity(0.95) : Sea.coral)
+            ctx.stroke(line, with: .color(lineCol), lineWidth: 1.4)
+            ctx.stroke(Path(ellipseIn: CGRect(x: mouth.x - 12, y: surfaceY - 4, width: 24, height: 9)),
+                       with: .color(Sea.foam.opacity(0.35)), lineWidth: 1)
+        }
 
         // Catch splash — a big water crown erupts where the fish came out…
         if landing {
@@ -2079,26 +2108,79 @@ enum GameArt {
 
     private static func drawBoot(_ ctx: GraphicsContext, size: Double, t: Double) {
         var c = ctx
-        c.rotate(by: .radians(sin(t * 3) * 0.12))   // a soggy sway
+        c.rotate(by: .radians(sin(t * 3) * 0.08))   // a gentle soggy sway
         let s = size
-        let brown = Color(red: 0.30, green: 0.22, blue: 0.17)
-        var boot = Path()
-        boot.move(to: CGPoint(x: -s * 0.16, y: 0))
-        boot.addLine(to: CGPoint(x: s * 0.10, y: 0))
-        boot.addLine(to: CGPoint(x: s * 0.12, y: s * 0.55))
-        boot.addLine(to: CGPoint(x: s * 0.50, y: s * 0.60))
-        boot.addQuadCurve(to: CGPoint(x: s * 0.50, y: s * 0.76), control: CGPoint(x: s * 0.56, y: s * 0.68))
-        boot.addLine(to: CGPoint(x: -s * 0.14, y: s * 0.72))
-        boot.closeSubpath()
-        c.fill(boot, with: .color(brown))
-        c.stroke(boot, with: .color(.black.opacity(0.3)), lineWidth: 1)
-        var sole = Path()
-        sole.move(to: CGPoint(x: -s * 0.14, y: s * 0.72))
-        sole.addLine(to: CGPoint(x: s * 0.52, y: s * 0.76))
-        sole.addLine(to: CGPoint(x: s * 0.52, y: s * 0.86))
-        sole.addLine(to: CGPoint(x: -s * 0.14, y: s * 0.82))
-        sole.closeSubpath()
-        c.fill(sole, with: .color(.black.opacity(0.6)))
+        let lit  = Color(red: 0.42, green: 0.30, blue: 0.19)   // dark, worn leather (lit)
+        let mid  = Color(red: 0.31, green: 0.22, blue: 0.13)   // leather body
+        let dk   = Color(red: 0.19, green: 0.13, blue: 0.08)   // seams / outline
+        let sole = Color(red: 0.13, green: 0.10, blue: 0.08)   // sole + heel
+        let mud  = Color(red: 0.24, green: 0.21, blue: 0.13)   // dull dried mud
+        func P(_ x: Double, _ y: Double) -> CGPoint { CGPoint(x: s * x, y: s * y) }
+
+        // --- The leather upper: a real boot's shaft → ankle → foot → rounded toe → heel ---
+        var upper = Path()
+        upper.move(to: P(-0.19, 0.05))                                   // back of the opening
+        upper.addLine(to: P(0.11, 0.05))                                // front of the opening
+        upper.addQuadCurve(to: P(0.13, 0.44), control: P(0.145, 0.26))  // front of the shaft down to the ankle
+        upper.addQuadCurve(to: P(0.46, 0.62), control: P(0.28, 0.50))   // vamp (top of the foot) out to the toe
+        upper.addQuadCurve(to: P(0.53, 0.78), control: P(0.575, 0.68))  // rounded toe (front)
+        upper.addQuadCurve(to: P(0.44, 0.84), control: P(0.52, 0.845))  // toe (bottom)
+        upper.addLine(to: P(-0.16, 0.84))                               // under the foot (sits on the sole)
+        upper.addQuadCurve(to: P(-0.20, 0.44), control: P(-0.225, 0.78))// heel + achilles curve
+        upper.addQuadCurve(to: P(-0.19, 0.05), control: P(-0.215, 0.18))// up the back of the shaft
+        upper.closeSubpath()
+        c.fill(upper, with: .linearGradient(Gradient(colors: [lit, mid]), startPoint: P(-0.2, 0), endPoint: P(0.5, 0.8)))
+
+        // --- Sole: a slim band with grippy tread "teeth" (lugs); the heel lugs run a bit deeper ---
+        let soleTop = 0.84, soleBot = 0.895
+        var soleP = Path()
+        soleP.move(to: P(-0.17, soleTop))
+        soleP.addLine(to: P(0.47, soleTop))
+        soleP.addQuadCurve(to: P(0.45, soleBot), control: P(0.53, soleBot - 0.012))   // toe wrap
+        soleP.addLine(to: P(-0.17, soleBot))
+        soleP.closeSubpath()
+        c.fill(soleP, with: .color(sole))
+        let nLugs = 8, lugX0 = -0.155, lugX1 = 0.42
+        for i in 0..<nLugs {
+            let tx = lugX0 + (lugX1 - lugX0) * (Double(i) + 0.5) / Double(nLugs)
+            let tw = (lugX1 - lugX0) / Double(nLugs) * 0.60
+            let th = (i < 2 ? 0.052 : 0.036)                                          // deeper lugs under the heel
+            c.fill(Path(roundedRect: CGRect(x: s * (tx - tw / 2), y: s * (soleBot - 0.006), width: s * tw, height: s * th),
+                        cornerRadius: s * 0.007), with: .color(sole))
+        }
+        c.stroke(upper, with: .color(dk.opacity(0.55)), lineWidth: max(0.9, s * 0.014))
+
+        // --- A few details (and no more) ---
+        // Opening: lit rim + dark interior (you can see down into the boot).
+        c.fill(Path(ellipseIn: CGRect(x: -s * 0.21, y: -s * 0.02, width: s * 0.34, height: s * 0.14)), with: .color(lit))
+        c.fill(Path(ellipseIn: CGRect(x: -s * 0.175, y: s * 0.005, width: s * 0.275, height: s * 0.095)), with: .color(dk))
+
+        // Vamp seam where the foot panel meets the ankle.
+        var seam = Path()
+        seam.move(to: P(-0.02, 0.50)); seam.addQuadCurve(to: P(0.42, 0.66), control: P(0.20, 0.52))
+        c.stroke(seam, with: .color(dk.opacity(0.5)), style: StrokeStyle(lineWidth: max(0.6, s * 0.012), dash: [s * 0.04, s * 0.03]))
+
+        // A collar seam just under the rim.
+        var collar = Path()
+        collar.move(to: P(-0.185, 0.17)); collar.addQuadCurve(to: P(0.12, 0.17), control: P(-0.03, 0.21))
+        c.stroke(collar, with: .color(dk.opacity(0.35)), lineWidth: max(0.6, s * 0.012))
+
+        // A toe-cap seam across the front of the foot.
+        var toeCap = Path()
+        toeCap.move(to: P(0.345, 0.66)); toeCap.addQuadCurve(to: P(0.40, 0.835), control: P(0.47, 0.74))
+        c.stroke(toeCap, with: .color(dk.opacity(0.4)), lineWidth: max(0.6, s * 0.012))
+
+        // Soft highlight down the front of the shaft (light from the upper-left).
+        var hi = Path()
+        hi.move(to: P(-0.08, 0.18)); hi.addQuadCurve(to: P(-0.05, 0.44), control: P(-0.11, 0.31))
+        c.stroke(hi, with: .color(.white.opacity(0.12)), lineWidth: max(1, s * 0.03))
+
+        // A little dried mud caked low on the foot — soft smudges near the sole, plus one higher splash.
+        for (mx, my, mw, mh) in [(0.24, 0.78, 0.20, 0.10), (0.04, 0.79, 0.14, 0.075),
+                                 (0.40, 0.74, 0.11, 0.07), (-0.07, 0.73, 0.09, 0.06), (0.16, 0.66, 0.07, 0.045)] {
+            c.fill(Path(ellipseIn: CGRect(x: s * (mx - mw / 2), y: s * (my - mh / 2), width: s * mw, height: s * mh)),
+                   with: .color(mud.opacity(0.5)))
+        }
     }
 
     // MARK: The predator — a big shadow that lunges in to eat your catch -------
@@ -2396,13 +2478,13 @@ enum GameArt {
 
         // Central white-water dome, with a few foam puffs for texture.
         let dw = (0.10 + 0.04 * rise) * w
-        let dh = (0.04 + 0.11 * rise) * h
+        let dh = (0.04 + 0.11 * rise) * vUnit(s)   // dome height width-locked → splash keeps shape on iPhone
         ctx.fill(Path(ellipseIn: CGRect(x: cx - dw, y: baseY - dh, width: dw * 2, height: dh * 1.5)),
                  with: .color(foam.opacity(0.95 * rise)))           // erupts & settles with `rise`
         for k in 0..<5 {
             let f = Double(k) / 4
             let bx = cx + (f - 0.5) * dw * 1.8
-            let by = baseY - (0.02 + 0.09 * sin(f * .pi) * rise) * h
+            let by = baseY - (0.02 + 0.09 * sin(f * .pi) * rise) * vUnit(s)
             let r = (5 + 7 * sin(f * .pi)) * (0.6 + 0.5 * rise)
             ctx.fill(Path(ellipseIn: CGRect(x: bx - r, y: by - r, width: r * 2, height: r * 2)),
                      with: .color((k % 2 == 0 ? foam : body).opacity(0.9 * rise)))
@@ -2415,7 +2497,7 @@ enum GameArt {
             let spd = (0.13 + 0.16 * Double((i * 17) % 11) / 11) * w
             let dist = spd * pc * 1.45
             let dx = cx + cos(ang) * dist
-            let dy = baseY + sin(ang) * dist + (pc * pc) * 0.26 * h        // gravity pulls them down
+            let dy = baseY + sin(ang) * dist + (pc * pc) * 0.26 * vUnit(s) // gravity pulls them down
             let big = i % 5 == 0
             let dsz = max(1.2, (big ? 5.5 : 3.0) * (1 - pc * 0.55))
             let col = (i % 3 == 0 ? body : foam).opacity(max(0, 1 - pc))   // fully gone by the end
@@ -2428,5 +2510,4 @@ enum GameArt {
             }
         }
     }
-
 }

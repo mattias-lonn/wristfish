@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		CD13FCFB2FE89D850009F887 /* Wristfish Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = CD13FCFA2FE89D850009F887 /* Wristfish Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E6F2670874E88F0D1927FF49 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 642C87950D7CAF7559D80FBE /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -35,6 +36,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		39E3AF915E7798F11C3F9BB7 /* Wristfish iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Wristfish iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		642C87950D7CAF7559D80FBE /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		CD13FCF42FE89D850009F887 /* Wristfish.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Wristfish.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CD13FCFA2FE89D850009F887 /* Wristfish Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Wristfish Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -48,6 +51,14 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		98960A082E5BD2B07F337C66 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6F2670874E88F0D1927FF49 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CD13FCF72FE89D850009F887 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -58,11 +69,28 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		07D210AFEC0D793A8D8B5753 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				642C87950D7CAF7559D80FBE /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		689B10C7BD52B03A969BDC8F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				07D210AFEC0D793A8D8B5753 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		CD13FCED2FE89D850009F887 = {
 			isa = PBXGroup;
 			children = (
 				CD13FCFE2FE89D850009F887 /* Wristfish Watch App */,
 				CD13FCF52FE89D850009F887 /* Products */,
+				689B10C7BD52B03A969BDC8F /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -71,6 +99,7 @@
 			children = (
 				CD13FCF42FE89D850009F887 /* Wristfish.app */,
 				CD13FCFA2FE89D850009F887 /* Wristfish Watch App.app */,
+				39E3AF915E7798F11C3F9BB7 /* Wristfish iOS.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -78,6 +107,26 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		BFF824604AC08B5FE00AA435 /* Wristfish iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6B9315AE3B4003EA528125AB /* Build configuration list for PBXNativeTarget "Wristfish iOS" */;
+			buildPhases = (
+				A8F1990654929CED91D7A690 /* Sources */,
+				98960A082E5BD2B07F337C66 /* Frameworks */,
+				FD721C0B55352E4F7D3CE25F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				CD13FCFE2FE89D850009F887 /* Wristfish Watch App */,
+			);
+			name = "Wristfish iOS";
+			productName = "Wristfish iOS";
+			productReference = 39E3AF915E7798F11C3F9BB7 /* Wristfish iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
 		CD13FCF32FE89D850009F887 /* Wristfish */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = CD13FD0B2FE89D860009F887 /* Build configuration list for PBXNativeTarget "Wristfish" */;
@@ -91,8 +140,6 @@
 				CD13FCFD2FE89D850009F887 /* PBXTargetDependency */,
 			);
 			name = Wristfish;
-			packageProductDependencies = (
-			);
 			productName = Wristfish;
 			productReference = CD13FCF42FE89D850009F887 /* Wristfish.app */;
 			productType = "com.apple.product-type.application.watchapp2-container";
@@ -113,8 +160,6 @@
 				CD13FCFE2FE89D850009F887 /* Wristfish Watch App */,
 			);
 			name = "Wristfish Watch App";
-			packageProductDependencies = (
-			);
 			productName = "Wristfish Watch App";
 			productReference = CD13FCFA2FE89D850009F887 /* Wristfish Watch App.app */;
 			productType = "com.apple.product-type.application";
@@ -153,6 +198,7 @@
 			targets = (
 				CD13FCF32FE89D850009F887 /* Wristfish */,
 				CD13FCF92FE89D850009F887 /* Wristfish Watch App */,
+				BFF824604AC08B5FE00AA435 /* Wristfish iOS */,
 			);
 		};
 /* End PBXProject section */
@@ -172,9 +218,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FD721C0B55352E4F7D3CE25F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		A8F1990654929CED91D7A690 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CD13FCF62FE89D850009F887 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -193,6 +253,89 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		792263E0EDE08879763F3DE5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = RJG3N9HJ6F;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Tiny Tide";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				"INFOPLIST_KEY_UISupportedInterfaceOrientations~ipad" = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dropdev.WristfishiOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C94148CFC0C1715CA6DB97C4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = RJG3N9HJ6F;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Tiny Tide";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				"INFOPLIST_KEY_UISupportedInterfaceOrientations~ipad" = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dropdev.WristfishiOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		CD13FD052FE89D860009F887 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -320,7 +463,7 @@
 				DEVELOPMENT_TEAM = RJG3N9HJ6F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Wristfish;
+				INFOPLIST_KEY_CFBundleDisplayName = "Tiny Tide";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
@@ -356,7 +499,7 @@
 				DEVELOPMENT_TEAM = RJG3N9HJ6F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Wristfish;
+				INFOPLIST_KEY_CFBundleDisplayName = "Tiny Tide";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
@@ -388,7 +531,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = RJG3N9HJ6F;
-				INFOPLIST_KEY_CFBundleDisplayName = Wristfish;
+				INFOPLIST_KEY_CFBundleDisplayName = "Tiny Tide";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dropdev.Wristfish;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -405,7 +548,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = RJG3N9HJ6F;
-				INFOPLIST_KEY_CFBundleDisplayName = Wristfish;
+				INFOPLIST_KEY_CFBundleDisplayName = "Tiny Tide";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dropdev.Wristfish;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -420,6 +563,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		6B9315AE3B4003EA528125AB /* Build configuration list for PBXNativeTarget "Wristfish iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C94148CFC0C1715CA6DB97C4 /* Release */,
+				792263E0EDE08879763F3DE5 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		CD13FCF12FE89D850009F887 /* Build configuration list for PBXProject "Wristfish" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

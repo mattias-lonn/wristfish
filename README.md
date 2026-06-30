@@ -1,6 +1,9 @@
-# Wristfish
+# Tiny Tide
 
-A watchOS fishing game built in SwiftUI — steer a boat, dodge rocks and lighthouses,
+> Player-facing name is **Tiny Tide**. The Xcode project, schemes and folders keep the original
+> **Wristfish** codename (and the bundle IDs are unchanged), so build commands still say "Wristfish".
+
+A cozy cross-platform (Apple Watch + iPhone) fishing game built in SwiftUI — steer a boat, dodge rocks and lighthouses,
 cast at ripples, and work a balance gauge to land your catch. Hook the occasional
 treasure chest (double points), pickaxe (cleave through rocks), or sea mine (let it go!).
 

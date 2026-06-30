@@ -14,6 +14,7 @@ struct Wristfish_Watch_AppApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .preferredColorScheme(.dark)   // the art is dark-themed — match the watch (no light-mode washout on iPhone)
         }
     }
 }

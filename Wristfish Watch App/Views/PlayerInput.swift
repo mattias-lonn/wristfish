@@ -14,7 +14,7 @@ struct PlayerInput: ViewModifier {
     @State private var crown = 0.0
     @FocusState private var focused: Bool
     #elseif os(iOS)
-    @State private var lastDragY = 0.0
+    @State private var lastDragX = 0.0
     #endif
 
     func body(content: Content) -> some View {
@@ -27,19 +27,19 @@ struct PlayerInput: ViewModifier {
             .onChange(of: crown) { old, new in model.crown(delta: new - old) }
             .onAppear { focused = true }
         #elseif os(iOS)
-        // Placeholder touch control — a vertical drag drives the same delta channel as the Crown.
-        // The real iPhone scheme (drag axis / tilt / on-screen control + feel tuning) is designed
-        // when the iOS target is added; the model side needs no changes.
+        // Touch control: a SIDEWAYS drag feeds the same abstract channel as the Digital Crown, so it
+        // drives steering (boating) and the reeling marker identically — zero game-logic changes.
+        // Casting stays on the shared tap (GameView's .onTapGesture); minimumDistance lets taps through.
         content
             .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
                     .onChanged { v in
-                        let dy = v.translation.height - lastDragY
-                        lastDragY = v.translation.height
-                        model.crown(delta: -dy * 0.06)   // drag up ≈ Crown up; scale is provisional
+                        let dx = v.translation.width - lastDragX
+                        lastDragX = v.translation.width
+                        model.crown(delta: Double(dx) * 0.16)   // drag right → boat right; ~60% screen ≈ full lane
                     }
-                    .onEnded { _ in lastDragY = 0 }
+                    .onEnded { _ in lastDragX = 0 }
             )
         #endif
     }
@@ -48,4 +48,19 @@ struct PlayerInput: ViewModifier {
 extension View {
     /// Routes platform input into the model's abstract control channel.
     func playerInput(_ model: GameModel) -> some View { modifier(PlayerInput(model: model)) }
+}
+
+/// Human-readable control wording, per platform — keeps hints and the tutorial honest (no "Crown" on iPhone).
+enum Controls {
+    #if os(iOS)
+    static let steerHint = "Drag to steer"
+    static let steerVerb = "Drag sideways"      // tutorial: "<verb> to steer your boat."
+    static let reelVerb  = "drag"               // tutorial: "…<verb> to keep the marker…"
+    static let steerIcon = "hand.draw.fill"
+    #else
+    static let steerHint = "Crown to steer"
+    static let steerVerb = "Turn the Digital Crown"
+    static let reelVerb  = "use the Crown"
+    static let steerIcon = "dial.medium.fill"
+    #endif
 }

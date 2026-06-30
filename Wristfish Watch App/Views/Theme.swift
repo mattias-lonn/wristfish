@@ -132,6 +132,10 @@ struct BoatModel: Identifiable {
 
 // MARK: - Buttons
 
+/// Shared cap so buttons don't stretch edge-to-edge on a wide phone — they cap here and centre. The watch
+/// screen is narrower than this, so it has no effect there (buttons still fill, as before).
+let seaButtonMaxWidth: CGFloat = 320
+
 /// Filled teal→blue capsule, dark text — the hero action.
 struct SeaPrimaryButton: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -143,6 +147,7 @@ struct SeaPrimaryButton: ButtonStyle {
             .foregroundStyle(.black)
             .opacity(configuration.isPressed ? 0.75 : 1)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .frame(maxWidth: seaButtonMaxWidth)        // phone: cap + centre · watch: no effect
     }
 }
 
@@ -159,6 +164,7 @@ struct SeaSecondaryButton: ButtonStyle {
             .foregroundStyle(tint)
             .opacity(configuration.isPressed ? 0.75 : 1)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .frame(maxWidth: seaButtonMaxWidth)        // phone: cap + centre · watch: no effect
     }
 }
 

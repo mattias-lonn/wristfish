@@ -25,8 +25,18 @@ final class GameModel: ObservableObject {
     private let boatSmooth  = 0.22      // how quickly the boat eases toward your steer (smoothing)
     private let wakeTrailLen = 14       // how many recent positions the wake trail remembers
     private let edge        = 0.10      // boat can't go past these x margins
-    let boatY: Double = 0.80            // boat sits here vertically (read by the art)
+    // Boat's vertical home. On the tall iPhone it sits low (0.80); on the near-square watch it rides a
+    // bit higher so the bottom prompt/meter ("Tap to cast/harpoon") fits clearly BELOW the boat, like iPhone.
+    var boatY: Double { renderAspect > designAspect + 0.05 ? 0.80 : 0.72 }
     private let boatHitR    = 0.080     // collision radius for the boat
+    /// Screen height ÷ width, set by the view each session. Collisions weight vertical distance by this
+    /// (relative to the watch's shape) so the hit box matches the on-screen art on a tall iPhone, while
+    /// staying identical on the watch. Defaults to the watch aspect the art was tuned for.
+    private let designAspect: Double = 251.0 / 205.0
+    var renderAspect: Double = 251.0 / 205.0
+    /// Weights a vertical distance so Euclidean x/y hit checks stay isotropic in pixels (matching the
+    /// drawn art). 1 on the watch (unchanged); the true aspect on a tall iPhone. Same basis as collides().
+    private var yFactor: Double { renderAspect > designAspect + 0.05 ? renderAspect : 1.0 }
     private let launchSpeedMult = 1.5   // harbour recede speed as a multiple of sea cruising speed
     private let launchClearDist = 1.2   // harbour scrolls this far (screen-heights), then play begins
     private let crashDuration   = 0.7   // splash effect length before the game-over card
@@ -628,7 +638,7 @@ final class GameModel: ObservableObject {
         guard !birdHit, phase == .casting, castReach > 0 else { birdSpeedTarget = 1; return }
         let hook = CGPoint(x: boatX, y: boatY - castReach)
         let bp = birdPos(birdProgress)
-        let dx = hook.x - bp.x, dy = hook.y - bp.y
+        let dx = hook.x - bp.x, dy = (hook.y - bp.y) * yFactor
         if dx * dx + dy * dy < birdHitRadius * birdHitRadius {     // the hook caught it
             hitBird(at: bp)
             birdSpeedTarget = 1
@@ -1302,8 +1312,9 @@ final class GameModel: ObservableObject {
         let target = hints
             .filter { abs($0.x - boatX) < castTol && abs($0.y - castY) < depthTol }
             .min(by: { a, b in
-                let da = (a.x - boatX) * (a.x - boatX) + (a.y - castY) * (a.y - castY)
-                let db = (b.x - boatX) * (b.x - boatX) + (b.y - castY) * (b.y - castY)
+                let dyA = (a.y - castY) * yFactor, dyB = (b.y - castY) * yFactor
+                let da = (a.x - boatX) * (a.x - boatX) + dyA * dyA
+                let db = (b.x - boatX) * (b.x - boatX) + dyB * dyB
                 return da < db
             })
         if let t = target {
@@ -1530,7 +1541,7 @@ final class GameModel: ObservableObject {
         for i in rocks.indices where rocks[i].kind == .boat {
             var vx = rocks[i].vx
             for j in rocks.indices where rocks[j].kind != .boat {
-                let dx = rocks[i].x - rocks[j].x, dy = rocks[i].y - rocks[j].y
+                let dx = rocks[i].x - rocks[j].x, dy = (rocks[i].y - rocks[j].y) * yFactor
                 let near = rocks[i].r + rocks[j].r + 0.05
                 if dx * dx + dy * dy < near * near {
                     vx += (dx >= 0 ? 1.0 : -1.0) * 0.20 * dt    // steer away from the rock
@@ -1565,12 +1576,12 @@ final class GameModel: ObservableObject {
     /// exclusion zone is just the rock radius plus the vak's small core — vakar can sit close, not on top.
     private func vakSpotOpen(x: Double, y: Double, deep: Bool) -> Bool {
         let core = vakCore(deep)
-        return !rocks.contains { let dx = $0.x - x, dy = $0.y - y, c = $0.r + core; return dx * dx + dy * dy < c * c }
+        return !rocks.contains { let dx = $0.x - x, dy = ($0.y - y) * yFactor, c = $0.r + core; return dx * dx + dy * dy < c * c }
     }
 
     /// Open spot for a rock: it won't cover the core of an existing vak (so we never have to delete one).
     private func rockSpotOpen(x: Double, y: Double, r: Double) -> Bool {
-        return !hints.contains { let dx = $0.x - x, dy = $0.y - y, c = r + vakCore($0.deep); return dx * dx + dy * dy < c * c }
+        return !hints.contains { let dx = $0.x - x, dy = ($0.y - y) * yFactor, c = r + vakCore($0.deep); return dx * dx + dy * dy < c * c }
     }
 
     /// Drop any scripted placements whose distance the level has now reached — at their exact x.
@@ -1591,7 +1602,11 @@ final class GameModel: ObservableObject {
     // MARK: Helpers ---------------------------------------------------------
 
     private func collides(_ r: Obstacle) -> Bool {
-        let dx = (r.x - boatX), dy = (r.y - boatY)
+        // Rocks are drawn with a width-based radius, so the hit box must measure vertical distance in the
+        // same units. On the watch (near-square) we keep the original hand-tuned feel (factor 1). On a
+        // taller screen (iPhone) we use the real aspect, making the hit box pixel-accurate — you crash on
+        // actual contact, not with a gap above/below. The watch is left exactly as before.
+        let dx = (r.x - boatX), dy = (r.y - boatY) * yFactor
         let rr = r.r + boatHitR
         return dx * dx + dy * dy < rr * rr
     }

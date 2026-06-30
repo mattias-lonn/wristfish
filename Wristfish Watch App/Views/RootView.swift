@@ -87,9 +87,9 @@ struct RootView: View {
                 ScrollView {
                     VStack(spacing: 12) {
                         Color.clear.frame(height: H * 0.27)      // title tucks in right at the boat's stern
-                        Text("WRISTFISH")
+                        Text("TINY TIDE")
                             .font(.system(size: 26, weight: .black, design: .rounded)).tracking(1)
-                            .foregroundStyle(Sea.titleGradient)
+                            .foregroundStyle(Color(red: 1.0, green: 0.8, blue: 0.322))   // #FFCC52
                             .shadow(color: .black.opacity(0.6), radius: 3, y: 1)
                             .opacity(titleIn ? 1 : 0)
                             .offset(y: titleIn ? 0 : 30)
