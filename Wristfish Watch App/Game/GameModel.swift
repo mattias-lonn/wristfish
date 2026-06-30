@@ -37,6 +37,9 @@ final class GameModel: ObservableObject {
     /// Weights a vertical distance so Euclidean x/y hit checks stay isotropic in pixels (matching the
     /// drawn art). 1 on the watch (unchanged); the true aspect on a tall iPhone. Same basis as collides().
     private var yFactor: Double { renderAspect > designAspect + 0.05 ? renderAspect : 1.0 }
+    /// The world scrolls in normalized height/second, so on a tall iPhone the same value covers far more
+    /// pixels/second and reads as much faster. Ease it back a notch on iPhone; the watch is unchanged.
+    private var scrollPlatformFactor: Double { renderAspect > designAspect + 0.05 ? 0.74 : 1.0 }
     private let launchSpeedMult = 1.5   // harbour recede speed as a multiple of sea cruising speed
     private let launchClearDist = 1.2   // harbour scrolls this far (screen-heights), then play begins
     private let crashDuration   = 0.7   // splash effect length before the game-over card
@@ -475,8 +478,11 @@ final class GameModel: ObservableObject {
     /// "Fish on!" transition progress 0…1.
     var hookProgress: Double { min(1, hookT / hookDuration) }
 
-    // Gauge difficulty — tighter & faster once a big fish is on.
-    private var curZoneHalf: Double  { hardFish ? hardZoneHalf : zoneHalf }
+    // Gauge difficulty — tighter & faster once a big fish is on. The safe zone (the blue band you keep the
+    // marker inside) is a touch smaller on the larger iPhone screen so landing a fish is a bit harder;
+    // the watch is unchanged. Drives both the catch logic and the drawn zone, so they stay in sync.
+    private var zonePlatformFactor: Double { renderAspect > designAspect + 0.05 ? 0.80 : 1.0 }
+    private var curZoneHalf: Double  { (hardFish ? hardZoneHalf : zoneHalf) * zonePlatformFactor }
     private var curZoneSpeed: Double { hardFish ? hardZoneSpeed : zoneSpeed }
     private var curFillRate: Double  { hardFish ? fillRate * hardFillMult : fillRate }
 
@@ -551,7 +557,7 @@ final class GameModel: ObservableObject {
         landingViaSleigh = false
         tentacles = []; krakenT = 0; krakenNextStrike = 0; krakenEmerged = false
         krakenHP = 1; harpoons = []; harpoonCool = 0; harpoonHitT = 99
-        krakenSpawn = Double.random(in: 55...95)
+        krakenSpawn = config.krakenFirstAt ?? Double.random(in: 55...95)
         bootsThisTrip = 0; pendingBootBeast = false; bootBeastT = 0; bootBeastRevealed = false
         bootThrows = []; bootThrowNext = 0; bootBeastBonus = 0
         fishCount = 0; caught = [:]; levelTime = 0; levelLosses = 0
@@ -925,13 +931,19 @@ final class GameModel: ObservableObject {
     /// Scrolls the water and drifts the rocks/ripples by the current (eased) world speed.
     /// `speedMul` lets the sleigh ride rush the world past faster.
     private func advanceWorld(_ dt: Double, speedMul: Double = 1) {
-        let speed = baseScroll * (1 + scrollRamp * ramp) * scrollFactor * speedMul
+        let speed = baseScroll * (1 + scrollRamp * ramp) * scrollFactor * speedMul * scrollPlatformFactor
         scroll += speed * dt
         worldDist += speed * dt
         processScript()
         for i in rocks.indices { rocks[i].y += speed * dt }
         for i in hints.indices { hints[i].y += speed * dt; hints[i].phase += dt }
-        for i in leaps.indices { leaps[i].y += speed * dt; leaps[i].age += dt }
+        for i in leaps.indices {
+            leaps[i].y += speed * dt; leaps[i].age += dt
+            if !leaps[i].splashed && leaps[i].age >= leapDuration * 0.78 {   // it drops back in → a faint plip
+                leaps[i].splashed = true
+                SoundManager.shared.play(.leapSplash)
+            }
+        }
         for i in shatters.indices { shatters[i].y += speed * dt; shatters[i].age += dt }
         updateDriftingBoats(dt)
         rocks.removeAll { $0.y > 1.15 }
@@ -973,7 +985,7 @@ final class GameModel: ObservableObject {
         launchT += dt
         let accel = min(1, launchT / 0.8)
         let ease = accel * accel * (3 - 2 * accel)          // smoothstep: gentle slow departure…
-        let speed = baseScroll * launchSpeedMult * ease     // …then cruises at ~sea speed
+        let speed = baseScroll * launchSpeedMult * ease * scrollPlatformFactor   // …then cruises at ~sea speed
         harborScroll += speed * dt
         scroll += speed * dt                                // waves drift in lock-step → same feel
         // The wake only builds once the shore has slid off-screen, so nothing splashes on the beach.

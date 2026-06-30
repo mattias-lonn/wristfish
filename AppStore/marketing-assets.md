@@ -169,6 +169,50 @@ The on-screen score HUD is shown in every gameplay view on both devices.
    Apple Watch Ultra sims, capture each scene on both with the same `WF_SCORE`. Verify the score
    matches per pair and is visible on both devices.
 3. **Revert** every temp harness — `grep -rn 'TEMP-' "Wristfish Watch App/"` = 0, both targets green.
+## 7. Marketing PREVIEW VIDEO (device-frame poster, live screens)
+
+The poster `AppStore/video/poster_template.png` (1284×2778, exported from the design tool with **green**
+phone + watch screens) gets its green replaced by live, in-sync gameplay → `tinytide_app_preview.mp4`.
+
+### Demo harness (TEMP) — `WF_DEMO`
+A deterministic attract-mode so the iPhone and watch play the **identical** sequence (→ they stay in
+step). All gated by `demoMode`, reverted after capture.
+- `GameTypes.swift`: `LevelConfig.isDemo` flag + a `LevelConfig.demo` factory (no danger, side-placed
+  obstacles the auto-pilot weaves past, `dayLength: 52` so the clip sweeps day→sunset, a scripted spawn list).
+- `GameModel.swift`: `var demoMode` (+ `demoStep/demoFishIdx/demoKrakenStarted/demoTentIdx/demoHarpoonLast/
+  demoLeapsDone/demoCastMarks/demoCastX/demoLeapMarks/demoKrakenAt`); `scrollPlatformFactor` forced to **1.0**
+  in demo so both devices advance the world identically; `start()` sets `demoMode = config.isDemo` and **opens
+  on score 1337**; a `demoDrive(dt)` called from `tick()` that, as each cast nears, **lines the boat up under
+  the incoming deep "cast target" ripple** (`demoCastX`) and casts straight onto it (drops at `castReach ≥
+  0.24` → short cast that's never off), glues the reel marker to the zone (clean PERFECT reels), spawns
+  **leaps from a ripple already on the water** (`hints.first(where:)`, no popping), and runs the
+  **kraken-combat finale**: dodge the alternating tentacles (`boatTargetX = 0.5 − 0.13·cos(ct·1.96)`) while
+  firing harpoons at the eyes (`tap()` every 0.7s) until it's driven off. Demo-gated determinism in `dropCast`
+  (lands the lined-up ripple by nearest-x, no yFactor dependence), `rollFish`→`demoFish()` (cod/salmon/
+  mackerel), `hookFish` (`zonePhase = 0`), `spawnTentacle` (alternating 0.30/0.70, fixed seed),
+  `krakenNextStrike` (fixed 1.6s), boating leap spawn, and the boat-unlock cameo (suppressed). The `.demo`
+  config carries a **dense side course** (rocks, lighthouses, gates) with **ripples scripted throughout** (so
+  vakar are always present, incl. two deep cast targets) and **two drifting-boat obstacles at worldDist 0.8 &
+  2.0** (they pass while fishing and are gone well before the kraken), `dayLength: 52` (day→sunset), and
+  `kraken: true, krakenFirstAt: 999` (only the manual finale fires).
+- `RootView.swift`: `.onAppear` auto-`startGame(.demo)` when `WF_DEMO=1` (one-shot `demoAutoStarted`).
+
+### Recreate the exact video — one command
+The whole harness is saved as a patch (`AppStore/video/wf_demo.patch`). Just run:
+```sh
+bash AppStore/video/build_preview.sh
+```
+It applies the patch, builds both targets, records each sim (`SIMCTL_CHILD_WF_DEMO=1`, ~40s), anchors both
+clips to the first CATCH! white-splash (frame-accurate sync), cuts a **30s** window (~6s lead-in → two catches
+→ kraken combat → "DROVE IT OFF!"), composites into the screens, and **reverts the patch on exit** (repo left
+clean, both targets green). Green is removed with a **despilled poster** (`masks.py` writes `poster_despill.png`
+— every green pixel → dark navy) plus exact per-screen stencil masks, so there's **no green rim and the
+foreground gull / device bezels are never clipped** (no heavy dilation). Output (overwritten in place):
+`tinytide_app_preview.mp4` + `tinytide_preview_hero.png`. To tweak the run, edit `wf_demo.patch`'s values
+(or re-apply it, edit the Swift, regenerate the patch) — keep `grep -rn 'TEMP-' "Wristfish Watch App/"` = 0.
+
+---
+
 4. Permanent art that grew out of this work (kept in the game): the **Old Boot**, rebuilt from scratch
    as a clean, realistic work-boot — a leather upper (shaft → ankle → vamp → rounded toe → achilles
    heel) over a proper sole where the heel and ball sit on the ground and the arch lifts between them;

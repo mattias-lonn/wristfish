@@ -11,7 +11,7 @@ import AVFoundation
 /// the rest are distinct cues for special moments, played directly via `SoundManager`.
 enum GameSound: String, CaseIterable {
     case cast, bite, tug, reel, catchSmall, catchBig, miss, crash
-    case perfect, combo, unlock, kraken, bootBeast, plop, gull
+    case perfect, combo, unlock, kraken, bootBeast, plop, gull, leapSplash
 
     /// A calm, balanced mix. Every .wav is normalized to the same peak, so this map alone sets the
     /// relative loudness: frequent/ambient cues (cast, reel) sit far under the one-shot reward cues.
@@ -25,6 +25,7 @@ enum GameSound: String, CaseIterable {
         case .bite:        return 0.34
         case .plop:        return 0.37
         case .gull:        return 0.05   // ambient flyby cry (kept very quiet)
+        case .leapSplash:  return 0.014  // a leaping fish dropping back in — barely-there, a whisper of water
         case .bootBeast:   return 0.40
         case .catchSmall:  return 0.43
         case .perfect:     return 0.48

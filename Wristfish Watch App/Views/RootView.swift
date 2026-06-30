@@ -70,9 +70,12 @@ struct RootView: View {
     private var menu: some View {
         GeometryReader { geo in
             let H = geo.size.height
+            // On tall phone screens the boat+title+buttons group sits top-heavy with a big empty gap below;
+            // nudge the whole group down so it reads as vertically centred. Watch aspect (~1.22) is untouched.
+            let restY = (geo.size.height / max(geo.size.width, 1) > 1.6) ? 0.34 : boatRestY
             ZStack(alignment: .top) {
                 waterScene                                   // full-screen living water (behind everything)
-                boatLayer(H: H)                              // one full-screen boat: sails up, then rides the scroll
+                boatLayer(H: H, restY: restY)                // one full-screen boat: sails up, then rides the scroll
 
                 // Legibility scrim: clear at the top (water + boat shine), darker over the buttons.
                 LinearGradient(stops: [
@@ -86,7 +89,7 @@ struct RootView: View {
                 // Title + buttons scroll; the boat behind tracks the same offset, so all move together.
                 ScrollView {
                     VStack(spacing: 12) {
-                        Color.clear.frame(height: H * 0.27)      // title tucks in right at the boat's stern
+                        Color.clear.frame(height: H * (restY + 0.05))  // title tucks in right at the boat's stern
                         Text("TINY TIDE")
                             .font(.system(size: 26, weight: .black, design: .rounded)).tracking(1)
                             .foregroundStyle(Color(red: 1.0, green: 0.8, blue: 0.322))   // #FFCC52
@@ -157,7 +160,7 @@ struct RootView: View {
     /// The boat lives in ONE full-screen canvas (so it never distorts): it sails up from the bottom
     /// during the intro, settles near the top, then rides the menu scroll (offset by `scrollY`) so it
     /// moves together with the title and buttons.
-    private func boatLayer(H: CGFloat) -> some View {
+    private func boatLayer(H: CGFloat, restY: Double) -> some View {
         let boat = BoatModel.all.first { $0.id == chosenBoat } ?? BoatModel.all[0]
         // The canvas always draws the boat at its resting spot; the rise is a plain SwiftUI
         // `.offset` animation (frame-perfect, unlike deriving position from the TimelineView clock).
@@ -172,14 +175,14 @@ struct RootView: View {
             Canvas { ctx, size in
                 let strength = 1.0 - 0.7 * calm                            // long wake while racing → gentle at rest
                 let trail = (0..<14).map { i in 0.5 + sin((t - Double(i) * 0.05) * 0.6) * 0.03 }
-                GameArt.drawBoat(ctx, size, x: 0.5 + sway, boatY: boatRestY + bob,
+                GameArt.drawBoat(ctx, size, x: 0.5 + sway, boatY: restY + bob,
                                  wake: trail, t: t, speed: strength, hull: boat.hull, accent: boat.accent,
                                  scale: boatScale, style: boat.style, shiny: boat.shiny)
             }
         }
-        // Held (boatStartY − boatRestY)·H below the screen until raised, then animated up to 0.
+        // Held (boatStartY − restY)·H below the screen until raised, then animated up to 0.
         // Combined with the scroll offset so the boat keeps riding the menu after it's docked.
-        .offset(y: (boatRaised ? 0 : (boatStartY - boatRestY) * H) - scrollY)
+        .offset(y: (boatRaised ? 0 : (boatStartY - restY) * H) - scrollY)
         .allowsHitTesting(false)
     }
 
@@ -221,12 +224,12 @@ struct RootView: View {
                         Text(lvl.title)
                             .font(.system(size: 14, weight: .bold, design: .rounded))
                             .foregroundStyle(.white)
-                            .fixedSize(horizontal: false, vertical: true)   // wrap, never truncate
+                            .lineLimit(1).minimumScaleFactor(0.8)         // shrink to fit, never wrap
                     }
-                    Text(unlocked ? lvl.subtitle : "Clear level \(lvl.id - 1) to unlock")
+                    Text(lvl.subtitle)                                    // the goal — shown for every level
                         .font(.system(size: 11))
-                        .foregroundStyle(unlocked ? .white.opacity(0.6) : Sea.coral.opacity(0.95))
-                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(.white.opacity(unlocked ? 0.6 : 0.4))
+                        .lineLimit(1).minimumScaleFactor(0.75)
                 }
                 Spacer()
                 if unlocked {
@@ -250,7 +253,8 @@ struct RootView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 12).padding(.vertical, 11)
         .background(.white.opacity(unlocked ? 0.10 : 0.04), in: RoundedRectangle(cornerRadius: 13))
-        .opacity(unlocked ? 1 : 0.6)
+        .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(.white.opacity(unlocked ? 0.12 : 0.05), lineWidth: 1))
+        .opacity(unlocked ? 1 : 0.62)
         .disabled(!unlocked)
     }
 

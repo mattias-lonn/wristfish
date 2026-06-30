@@ -1,0 +1,270 @@
+--- a/Wristfish Watch App/Game/GameModel.swift
++++ b/Wristfish Watch App/Game/GameModel.swift
+@@ -34,12 +34,24 @@
+     /// staying identical on the watch. Defaults to the watch aspect the art was tuned for.
+     private let designAspect: Double = 251.0 / 205.0
+     var renderAspect: Double = 251.0 / 205.0
++    // TEMP-DEMO: deterministic attract-mode for marketing video capture (driven by LevelConfig.isDemo).
++    var demoMode = false
++    private var demoStep = 0
++    private var demoFishIdx = 0
++    private var demoKrakenStarted = false
++    private var demoTentIdx = 0
++    private var demoHarpoonLast = -10.0
++    private var demoLeapsDone: Set<Double> = []
++    private let demoCastMarks: [Double] = [1.8, 3.6]
++    private let demoCastX:     [Double] = [0.40, 0.60]   // line up under the deep "cast target" ripples
++    private let demoLeapMarks: [Double] = [0.7, 2.2]
++    private let demoKrakenAt: Double = 4.0
+     /// Weights a vertical distance so Euclidean x/y hit checks stay isotropic in pixels (matching the
+     /// drawn art). 1 on the watch (unchanged); the true aspect on a tall iPhone. Same basis as collides().
+     private var yFactor: Double { renderAspect > designAspect + 0.05 ? renderAspect : 1.0 }
+     /// The world scrolls in normalized height/second, so on a tall iPhone the same value covers far more
+     /// pixels/second and reads as much faster. Ease it back a notch on iPhone; the watch is unchanged.
+-    private var scrollPlatformFactor: Double { renderAspect > designAspect + 0.05 ? 0.74 : 1.0 }
++    private var scrollPlatformFactor: Double { (renderAspect > designAspect + 0.05 && !demoMode) ? 0.74 : 1.0 }
+     private let launchSpeedMult = 1.5   // harbour recede speed as a multiple of sea cruising speed
+     private let launchClearDist = 1.2   // harbour scrolls this far (screen-heights), then play begins
+     private let crashDuration   = 0.7   // splash effect length before the game-over card
+@@ -500,6 +512,7 @@
+     /// Start (or restart) a playthrough of the given level. Defaults to endless freeplay.
+     func start(_ config: LevelConfig = .freeplay) {
+         self.config = config
++        demoMode = config.isDemo             // TEMP-DEMO
+         boat = BoatModel.selected            // pick up the player's chosen boat for this trip
+         baseScroll = config.baseScroll
+         scrollRamp = config.scrollRamp
+@@ -510,6 +523,7 @@
+         pickaxeChance = config.specials.pickaxe
+         sortedScript = config.script.sorted { $0.at < $1.at }
+         resetState()
++        if demoMode { score = 1337; displayScore = 1337 }   // TEMP-DEMO: open on a believable score
+         startTimer()
+     }
+ 
+@@ -550,6 +564,8 @@
+         birdSpawn = Double.random(in: 8...16)
+         birdXOffset = 0; birdHit = false; birdSpeed = 1; birdSpeedTarget = 1; feathers = []
+         worldDist = 0; scriptIndex = 0
++        demoStep = 0; demoFishIdx = 0; demoKrakenStarted = false; demoTentIdx = 0   // TEMP-DEMO
++        demoHarpoonLast = -10; demoLeapsDone = []                                    // TEMP-DEMO
+         sleighStamina = 1; sleighStrain = 0; sleighClock = 0; towFishX = 0.5; towFishY = sleighFishY
+         landingViaSleigh = false
+         tentacles = []; krakenT = 0; krakenNextStrike = 0; krakenEmerged = false
+@@ -747,6 +763,60 @@
+     /// Called by the result card's Play-again / Retry button — replays the current level.
+     func restart() { start(config) }
+ 
++    // TEMP-DEMO ----------------------------------------------------------------
++    private func demoFish() -> FishKind {
++        let kinds: [FishKind] = [.cod, .salmon, .mackerel]
++        let k = kinds[demoFishIdx % kinds.count]; demoFishIdx += 1
++        return k
++    }
++
++    /// Deterministic attract-mode driver. Steers a gentle weave, but as each cast nears it lines the boat
++    /// up UNDER the deep "cast target" ripple drifting in, then casts straight onto it (so the cast is never
++    /// off). Reels cleanly, spawns leaps from a ripple already on the water, and runs the kraken finale
++    /// (dodge the alternating tentacles + fire harpoons at the eyes). All keyed to worldDist / kraken clock
++    /// so iPhone & watch run the identical sequence in sync.
++    private func demoDrive(_ dt: Double) {
++        if phase == .boating || phase == .launching {
++            boatTargetX = 0.5 + 0.18 * sin(worldDist * 2.4)          // gentle weave between the side obstacles
++        }
++        // Cast: line up under the incoming target ripple, then cast straight up onto it.
++        if phase == .boating, demoStep < demoCastMarks.count {
++            let mark = demoCastMarks[demoStep]
++            if worldDist >= mark - 0.75 {
++                boatTargetX = demoCastX[demoStep]                    // override the weave → align with the ripple
++                if worldDist >= mark, abs(boatX - demoCastX[demoStep]) < 0.05 {
++                    demoStep += 1
++                    startAim()
++                }
++            }
++        }
++        if phase == .reeling { marker = zoneCenter }                // glue to the zone → a clean PERFECT reel
++        if phase == .casting, castReach >= 0.24 { dropCast() }      // a short cast, dropped onto the ripple
++
++        // Ambient leaps spring from a ripple that's already on the water (no popping a new vak in).
++        for d in demoLeapMarks where !demoLeapsDone.contains(d) && worldDist >= d {
++            demoLeapsDone.insert(d)
++            if let h = hints.first(where: { $0.y > 0.18 && $0.y < 0.5 }) {
++                leaps.append(Leap(x: h.x, y: h.y, dir: h.x < 0.5 ? 1 : -1))
++            }
++        }
++
++        if !demoKrakenStarted, demoStep >= demoCastMarks.count, phase == .boating, worldDist >= demoKrakenAt {
++            demoKrakenStarted = true
++            startKraken()                                            // the finale rises after the last catch
++        }
++
++        if phase == .kraken {
++            let ct = krakenT - krakenIntro                          // <0 while it's still rising
++            if ct < 0 {
++                boatTargetX = 0.5
++            } else {
++                boatTargetX = 0.5 - 0.13 * cos(ct * 1.96)           // weave opposite the alternating tentacles
++                if ct - demoHarpoonLast >= 0.7 { demoHarpoonLast = ct; tap() }   // fire harpoons at the eyes
++            }
++        }
++    }
++
+     // MARK: The loop --------------------------------------------------------
+ 
+     private func tick() {
+@@ -779,6 +849,8 @@
+             if wakeTrail.count > wakeTrailLen { wakeTrail.removeLast() }
+         }
+ 
++        if demoMode { demoDrive(dt) }   // TEMP-DEMO: scripted steering / casting / reeling / kraken combat
++
+         switch phase {
+         case .launching: tickLaunch(dt)
+         case .boating:   tickBoating(dt)
+@@ -795,7 +867,7 @@
+         }
+ 
+         // A newly-unlocked boat does a cameo lap — only while the top-down world is on screen.
+-        if isWorldPhase {
++        if isWorldPhase && !demoMode {   // TEMP-DEMO keeps the attract run free of cameo clutter
+             if cameoBoat == nil, !cameoQueue.isEmpty { startCameo(cameoQueue.removeFirst()) }
+             if cameoBoat != nil { tickCameo(dt) }
+         }
+@@ -893,7 +965,7 @@
+         leapSpawn -= dt
+         if leapSpawn <= 0 {
+             // A fish leaps where the fish are — at one of the ripple spots ahead.
+-            if let h = hints.filter({ $0.y > 0.08 && $0.y < 0.66 }).randomElement() {
++            if !demoMode, let h = hints.filter({ $0.y > 0.08 && $0.y < 0.66 }).randomElement() {
+                 leaps.append(Leap(x: h.x, y: h.y, dir: Bool.random() ? 1 : -1))
+             }
+             leapSpawn = Double.random(in: 4...8)
+@@ -1174,7 +1246,7 @@
+         if krakenNextStrike <= 0 {
+             spawnTentacle()
+             let prog = krakenProgress                 // it rages faster as it goes
+-            krakenNextStrike = (1.6 - 0.85 * prog) * Double.random(in: 0.85...1.15)
++            krakenNextStrike = demoMode ? 1.6 : (1.6 - 0.85 * prog) * Double.random(in: 0.85...1.15)
+         }
+ 
+         // Harpoons fly up; resolve any that reach the body band.
+@@ -1218,6 +1290,12 @@
+     }
+ 
+     private func spawnTentacle() {
++        if demoMode {                                    // TEMP-DEMO: alternating sides, away from the dodging boat
++            let x = demoTentIdx % 2 == 0 ? 0.30 : 0.70
++            demoTentIdx += 1
++            tentacles.append(Tentacle(x: x, seed: 4242))
++            return
++        }
+         // Most slams aim near you (forcing a dodge); some land wide.
+         let aimed = Double.random(in: 0...1) < 0.6
+         let x = aimed ? boatX + Double.random(in: -0.18...0.18) : Double.random(in: 0.12...0.88)
+@@ -1317,6 +1395,12 @@
+     /// Drop the line where the cast has reached and see what's there.
+     private func dropCast() {
+         SoundManager.shared.play(.plop)          // the lure hits the water
++        if demoMode {                            // TEMP-DEMO: land the ripple we lined up on (nearest in x)
++            if let h = hints.filter({ $0.y > 0.15 && $0.y < 0.75 }).min(by: { abs($0.x - boatX) < abs($1.x - boatX) }) {
++                hints.removeAll { $0.id == h.id }; hookFish(deep: h.deep)
++            } else { hookFish(deep: true) }
++            return
++        }
+         let castY = boatY - castReach
+         let target = hints
+             .filter { abs($0.x - boatX) < castTol && abs($0.y - castY) < depthTol }
+@@ -1351,7 +1435,7 @@
+ 
+         reelProgress = 0.25
+         marker = 0.5
+-        zonePhase = Double.random(in: 0...(2 * .pi))   // zone starts at a random spot
++        zonePhase = demoMode ? 0 : Double.random(in: 0...(2 * .pi))   // zone starts at a random spot
+         zoneCenter = 0.5 + sin(zonePhase) * zoneAmp
+         reelClock = 0
+         wasInZone = false
+@@ -1371,6 +1455,7 @@
+     /// Deep water leans toward the big, valuable fish; shallow toward the small ones.
+     /// The exact odds come from the level's fish table.
+     private func rollFish(deep: Bool) -> FishKind {
++        if demoMode { return demoFish() }   // TEMP-DEMO: deterministic catch sequence
+         let n = nightLevel
+         // The night shift leans toward trophies: a chance to draw on the deep (big-fish) table even on a
+         // shallow cast, plus a bias toward the larger end of whichever table.
+--- a/Wristfish Watch App/Game/GameTypes.swift
++++ b/Wristfish Watch App/Game/GameTypes.swift
+@@ -277,6 +277,7 @@
+     var finishAt: Double? = nil            // world distance to the finish line (for .reachFinish levels)
+     var kraken: Bool = false               // can the kraken surface on this level?
+     var krakenFirstAt: Double? = nil       // force the first kraken at this many seconds (nil = random 55…95)
++    var isDemo: Bool = false               // TEMP-DEMO: deterministic attract-mode for marketing capture
+ 
+     /// The endless score-chase. Renamed "Open Water" in the menu.
+     static let freeplay = LevelConfig(
+@@ -285,6 +286,45 @@
+         baseScroll: 0.24, scrollRamp: 0.6, rampSeconds: 90,
+         rockSpawn: 1.4...2.6, hintSpawn: 1.8...3.0, lethal: true,
+         fish: .openWater, specials: .standard, birds: true, predator: true, script: [], kraken: true)
++
++    /// TEMP-DEMO: a fixed, deterministic attract-mode for marketing capture. Ripples are present throughout
++    /// (incl. two deep "cast targets" the boat lines up on), two drifting-boat obstacles pass while fishing
++    /// (well before the kraken), a dense side course, cosy day→sunset light, no danger, kraken-combat finale.
++    static let demo = LevelConfig(
++        id: -1, title: "Demo", subtitle: "",
++        objective: nil, fixedTimeOfDay: nil, dayLength: 52,
++        baseScroll: 0.30, scrollRamp: 0.22, rampSeconds: 80,
++        rockSpawn: nil, hintSpawn: nil, lethal: false,
++        fish: .bluewater, specials: .none, birds: false, predator: false,
++        script: [
++            // ambient ripples — vakar on the water the whole time
++            ScriptedSpawn(at: 0.4, x: 0.55, item: .ripple(deep: false)),
++            ScriptedSpawn(at: 0.9, x: 0.30, item: .ripple(deep: false)),
++            ScriptedSpawn(at: 1.6, x: 0.62, item: .ripple(deep: false)),
++            ScriptedSpawn(at: 2.3, x: 0.38, item: .ripple(deep: false)),
++            ScriptedSpawn(at: 2.9, x: 0.66, item: .ripple(deep: false)),
++            ScriptedSpawn(at: 4.3, x: 0.50, item: .ripple(deep: false)),
++            // cast targets — the boat lines up under these and casts onto them
++            ScriptedSpawn(at: 1.25, x: 0.40, item: .ripple(deep: true)),
++            ScriptedSpawn(at: 3.05, x: 0.60, item: .ripple(deep: true)),
++            // drifting-boat obstacles — pass while fishing, gone well before the kraken
++            ScriptedSpawn(at: 0.8, x: 0.16, item: .driftBoat(vx: 0.0)),
++            ScriptedSpawn(at: 2.0, x: 0.84, item: .driftBoat(vx: 0.0)),
++            // dense side course (rocks, gates, lighthouses) to weave through
++            ScriptedSpawn(at: 0.5, x: 0.17, item: .rock(r: 0.060)),
++            ScriptedSpawn(at: 0.7, x: 0.83, item: .rock(r: 0.058)),
++            ScriptedSpawn(at: 1.1, x: 0.17, item: .rock(r: 0.058)),
++            ScriptedSpawn(at: 1.1, x: 0.83, item: .rock(r: 0.058)),   // gate
++            ScriptedSpawn(at: 1.5, x: 0.84, item: .lighthouse),
++            ScriptedSpawn(at: 2.4, x: 0.84, item: .rock(r: 0.056)),
++            ScriptedSpawn(at: 2.7, x: 0.17, item: .rock(r: 0.058)),
++            ScriptedSpawn(at: 2.7, x: 0.83, item: .rock(r: 0.058)),   // gate
++            ScriptedSpawn(at: 3.1, x: 0.16, item: .lighthouse),
++            ScriptedSpawn(at: 3.4, x: 0.84, item: .rock(r: 0.060)),
++            ScriptedSpawn(at: 3.8, x: 0.17, item: .rock(r: 0.058)),
++            ScriptedSpawn(at: 4.1, x: 0.84, item: .rock(r: 0.058)),
++        ],
++        kraken: true, krakenFirstAt: 999, isDemo: true)
+ }
+ 
+ // MARK: - Authored patterns + the campaign --------------------------------------
+--- a/Wristfish Watch App/Views/RootView.swift
++++ b/Wristfish Watch App/Views/RootView.swift
+@@ -21,6 +21,7 @@
+     @State private var titleIn = false
+     @State private var shownButtons = 0
+     @State private var scrollY: CGFloat = 0    // live menu scroll offset; the boat tracks it
++    @State private var demoAutoStarted = false  // TEMP-DEMO one-shot guard
+     private let introDelay = 0.30              // a water-only beat before the boat appears
+     private let riseDuration = 1.40            // the boat racing up from the bottom of the screen
+     private let boatStartY = 1.10              // just below the screen — fully hidden until it sets off
+@@ -118,6 +119,10 @@
+         .onAppear {
+             MusicManager.shared.play(.menu)         // starts the menu bed (no-op unless Music is enabled);
+             runIntro()                              // also crossfades gameplay→menu when returning from a run
++            if ProcessInfo.processInfo.environment["WF_DEMO"] == "1", !demoAutoStarted {   // TEMP-DEMO
++                demoAutoStarted = true
++                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { startGame(.demo) }
++            }
+         }
+     }
+ 
