@@ -1,6 +1,6 @@
 //
 //  Theme.swift
-//  Wristfish — shared arcade styling (ocean palette).
+//  Tiny Tide — shared arcade styling (ocean palette).
 //
 //  🎨 Repaint here: every colour the game uses is defined in `Sea`. Change these and the
 //  whole game re-themes. The Canvas art (GameArt.swift) and the menus both read from this.

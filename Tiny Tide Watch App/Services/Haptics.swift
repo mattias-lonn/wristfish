@@ -1,6 +1,6 @@
 //
 //  Haptics.swift
-//  Wristfish — one place for every haptic cue. Honors the Settings toggle. The cue taxonomy is shared;
+//  Tiny Tide — one place for every haptic cue. Honors the Settings toggle. The cue taxonomy is shared;
 //  only the per-platform playback differs (watchOS uses WatchKit, iOS uses UIKit feedback generators).
 //
 

@@ -1,6 +1,6 @@
 //
 //  GameModel.swift
-//  Wristfish — all the game logic and the 30 fps loop. No drawing here (see GameArt.swift).
+//  Tiny Tide — all the game logic and the 30 fps loop. No drawing here (see GameArt.swift).
 //
 //  Inputs come from GameView:
 //    • Digital Crown  → steer the boat (boating) / reel the fish in (reeling)
@@ -28,15 +28,21 @@ final class GameModel: ObservableObject {
     // Boat's vertical home. On the tall iPhone it sits low (0.80); on the near-square watch it rides a
     // bit higher so the bottom prompt/meter ("Tap to cast/harpoon") fits clearly BELOW the boat, like iPhone.
     var boatY: Double { renderAspect > designAspect + 0.05 ? 0.80 : 0.72 }
-    private let boatHitR    = 0.080     // collision radius for the boat
+    private let boatHitR    = 0.080     // collision radius for the boat (vertical / general)
+    /// The hull is drawn narrower than it is tall (half-width 0.066·W vs the 0.080 hit radius), so on a wide
+    /// landscape screen (iPad) the sides crash slightly early. There we match the side hit radius to the hull;
+    /// the bow/stern stay at boatHitR (the thin tips feel right). Watch, iPhone and iPad-portrait are unchanged.
+    private var boatHitRx: Double { renderAspect < 1.0 ? 0.066 : boatHitR }
     /// Screen height ÷ width, set by the view each session. Collisions weight vertical distance by this
     /// (relative to the watch's shape) so the hit box matches the on-screen art on a tall iPhone, while
     /// staying identical on the watch. Defaults to the watch aspect the art was tuned for.
     private let designAspect: Double = 251.0 / 205.0
     var renderAspect: Double = 251.0 / 205.0
     /// Weights a vertical distance so Euclidean x/y hit checks stay isotropic in pixels (matching the
-    /// drawn art). 1 on the watch (unchanged); the true aspect on a tall iPhone. Same basis as collides().
-    private var yFactor: Double { renderAspect > designAspect + 0.05 ? renderAspect : 1.0 }
+    /// drawn art). 1 on the watch (unchanged); the true aspect on any screen that deviates from the watch
+    /// shape — taller (iPhone portrait) OR wider (iPad landscape), where 1.0 would squish the hit circle
+    /// vertically. Same basis as collides().
+    private var yFactor: Double { abs(renderAspect - designAspect) > 0.05 ? renderAspect : 1.0 }
     /// The world scrolls in normalized height/second, so on a tall iPhone the same value covers far more
     /// pixels/second and reads as much faster. Ease it back a notch on iPhone; the watch is unchanged.
     private var scrollPlatformFactor: Double { renderAspect > designAspect + 0.05 ? 0.74 : 1.0 }
@@ -1618,9 +1624,13 @@ final class GameModel: ObservableObject {
         // same units. On the watch (near-square) we keep the original hand-tuned feel (factor 1). On a
         // taller screen (iPhone) we use the real aspect, making the hit box pixel-accurate — you crash on
         // actual contact, not with a gap above/below. The watch is left exactly as before.
+        // In landscape the art zooms out (GameArt sizes by width × renderAspect/designAspect), so the hit
+        // box shrinks by the same factor to keep matching the drawn rocks/hull. 1 elsewhere (inert).
+        let f = renderAspect < 1 ? renderAspect / designAspect : 1
         let dx = (r.x - boatX), dy = (r.y - boatY) * yFactor
-        let rr = r.r + boatHitR
-        return dx * dx + dy * dy < rr * rr
+        let rx = (r.r + boatHitRx) * f, ry = (r.r + boatHitR) * f   // elliptical: narrower across the hull's sides
+        let nx = dx / rx, ny = dy / ry
+        return nx * nx + ny * ny < 1
     }
 
     private func showFlash(_ text: String, gold: Bool = false, duration: Double = 1.1) {

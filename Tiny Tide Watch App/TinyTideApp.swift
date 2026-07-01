@@ -1,6 +1,6 @@
 //
-//  WristfishApp.swift
-//  Wristfish Watch App
+//  TinyTideApp.swift
+//  Tiny Tide Watch App
 //
 //  Created by Mattias Lönn on 2026-06-22.
 //
@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct Wristfish_Watch_AppApp: App {
+struct TinyTideApp: App {
     init() { LocalStore.startCloudSync() }   // begin mirroring progress to iCloud + merging changes back
 
     var body: some Scene {

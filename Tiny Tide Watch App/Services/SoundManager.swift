@@ -1,6 +1,6 @@
 //
 //  SoundManager.swift
-//  Wristfish — tiny SFX layer. One short synthesized cue per game event, mirroring the haptic
+//  Tiny Tide — tiny SFX layer. One short synthesized cue per game event, mirroring the haptic
 //  taxonomy so feedback stays in sync. Plays through an .ambient session (respects the silent switch)
 //  and is gated by the Settings sound toggle. Cross-platform (watchOS + a future iOS target).
 //

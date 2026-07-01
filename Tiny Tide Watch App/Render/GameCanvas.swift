@@ -1,6 +1,6 @@
 //
 //  GameCanvas.swift
-//  Wristfish — turns the GameModel's state into a frame, using GameArt for every shape.
+//  Tiny Tide — turns the GameModel's state into a frame, using GameArt for every shape.
 //
 
 import SwiftUI

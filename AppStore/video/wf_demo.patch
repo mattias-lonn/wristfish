@@ -1,5 +1,5 @@
---- a/Wristfish Watch App/Game/GameModel.swift
-+++ b/Wristfish Watch App/Game/GameModel.swift
+--- a/Tiny Tide Watch App/Game/GameModel.swift
++++ b/Tiny Tide Watch App/Game/GameModel.swift
 @@ -34,12 +34,24 @@
      /// staying identical on the watch. Defaults to the watch aspect the art was tuned for.
      private let designAspect: Double = 251.0 / 205.0
@@ -191,8 +191,8 @@
          let n = nightLevel
          // The night shift leans toward trophies: a chance to draw on the deep (big-fish) table even on a
          // shallow cast, plus a bias toward the larger end of whichever table.
---- a/Wristfish Watch App/Game/GameTypes.swift
-+++ b/Wristfish Watch App/Game/GameTypes.swift
+--- a/Tiny Tide Watch App/Game/GameTypes.swift
++++ b/Tiny Tide Watch App/Game/GameTypes.swift
 @@ -277,6 +277,7 @@
      var finishAt: Double? = nil            // world distance to the finish line (for .reachFinish levels)
      var kraken: Bool = false               // can the kraken surface on this level?
@@ -247,8 +247,8 @@
  }
  
  // MARK: - Authored patterns + the campaign --------------------------------------
---- a/Wristfish Watch App/Views/RootView.swift
-+++ b/Wristfish Watch App/Views/RootView.swift
+--- a/Tiny Tide Watch App/Views/RootView.swift
++++ b/Tiny Tide Watch App/Views/RootView.swift
 @@ -21,6 +21,7 @@
      @State private var titleIn = false
      @State private var shownButtons = 0

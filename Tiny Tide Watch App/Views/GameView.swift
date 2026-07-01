@@ -1,6 +1,6 @@
 //
 //  GameView.swift
-//  Wristfish — the gameplay screen. Hosts the Canvas, routes Crown + taps to the model,
+//  Tiny Tide — the gameplay screen. Hosts the Canvas, routes Crown + taps to the model,
 //  and lays the HUD / result cards on top.
 //
 

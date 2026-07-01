@@ -1,6 +1,6 @@
 //
 //  PlayerInput.swift
-//  Wristfish — the one platform-specific seam for controls. The game model only ever sees an abstract
+//  Tiny Tide — the one platform-specific seam for controls. The game model only ever sees an abstract
 //  `crown(delta:)` channel plus `tap()`, so each platform just feeds that: the watch uses the Digital
 //  Crown, iOS uses a drag (to be tuned when the iPhone target lands). Everything else is shared.
 //

@@ -1,6 +1,6 @@
 //
 //  TutorialView.swift
-//  Wristfish — "How to play", reachable from the start menu.
+//  Tiny Tide — "How to play", reachable from the start menu.
 //
 
 import SwiftUI

@@ -1,6 +1,6 @@
 //
 //  GameTypes.swift
-//  Wristfish — pure value types for the game (no SwiftUI, no UIKit).
+//  Tiny Tide — pure value types for the game (no SwiftUI, no UIKit).
 //
 //  The flow:  boating ──tap──▶ casting ──bite──▶ reeling ──land──▶ landed ──tap──▶ boating
 //             (hit a rock at any time during boating ▶ gameOver)

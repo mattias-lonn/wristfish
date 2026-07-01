@@ -1,6 +1,6 @@
 //
 //  MusicManager.swift
-//  Wristfish — looping background music. Three short, seamless beds (menu, gameplay, and a darker
+//  Tiny Tide — looping background music. Three short, seamless beds (menu, gameplay, and a darker
 //  "boss" bed for monster fights) that crossfade on transitions and sit well under the SFX mix. Plays
 //  through the same .ambient session as SoundManager (so it mixes politely and is silenced by the
 //  Ring/Silent switch), is gated by the Settings music toggle, and — being a polite background bed —

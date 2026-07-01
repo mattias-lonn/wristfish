@@ -1,6 +1,6 @@
 //
 //  LocalStore.swift
-//  Wristfish — local progress (UserDefaults) mirrored to iCloud key-value storage so a player keeps
+//  Tiny Tide — local progress (UserDefaults) mirrored to iCloud key-value storage so a player keeps
 //  their best score, campaign stars, lifetime stats and chosen boat across reinstalls, a new Apple
 //  Watch, and (later) an iPhone version on the same Apple ID.
 //

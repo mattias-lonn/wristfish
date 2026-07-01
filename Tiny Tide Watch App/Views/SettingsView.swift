@@ -1,6 +1,6 @@
 //
 //  SettingsView.swift
-//  Wristfish — minimal settings (more can be added as the game grows).
+//  Tiny Tide — minimal settings (more can be added as the game grows).
 //
 
 import SwiftUI

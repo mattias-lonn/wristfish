@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "BFF824604AC08B5FE00AA435"
-               BuildableName = "Wristfish iOS.app"
-               BlueprintName = "Wristfish iOS"
-               ReferencedContainer = "container:Wristfish.xcodeproj">
+               BuildableName = "Tiny Tide iOS.app"
+               BlueprintName = "Tiny Tide iOS"
+               ReferencedContainer = "container:Tiny Tide.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -31,9 +31,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BFF824604AC08B5FE00AA435"
-            BuildableName = "Wristfish iOS.app"
-            BlueprintName = "Wristfish iOS"
-            ReferencedContainer = "container:Wristfish.xcodeproj">
+            BuildableName = "Tiny Tide iOS.app"
+            BlueprintName = "Tiny Tide iOS"
+            ReferencedContainer = "container:Tiny Tide.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
@@ -54,9 +54,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BFF824604AC08B5FE00AA435"
-            BuildableName = "Wristfish iOS.app"
-            BlueprintName = "Wristfish iOS"
-            ReferencedContainer = "container:Wristfish.xcodeproj">
+            BuildableName = "Tiny Tide iOS.app"
+            BlueprintName = "Tiny Tide iOS"
+            ReferencedContainer = "container:Tiny Tide.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -71,9 +71,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BFF824604AC08B5FE00AA435"
-            BuildableName = "Wristfish iOS.app"
-            BlueprintName = "Wristfish iOS"
-            ReferencedContainer = "container:Wristfish.xcodeproj">
+            BuildableName = "Tiny Tide iOS.app"
+            BlueprintName = "Tiny Tide iOS"
+            ReferencedContainer = "container:Tiny Tide.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

@@ -1,6 +1,6 @@
 //
 //  RootView.swift
-//  Wristfish — the start menu. Full-screen state switch (no nav chrome over the game).
+//  Tiny Tide — the start menu. Full-screen state switch (no nav chrome over the game).
 //
 
 import SwiftUI

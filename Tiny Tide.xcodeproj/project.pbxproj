@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AAAA000000000000000000E1 /* Wristfish Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = CD13FCFA2FE89D850009F887 /* Wristfish Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		CD13FCFB2FE89D850009F887 /* Wristfish Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = CD13FCFA2FE89D850009F887 /* Wristfish Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AAAA000000000000000000E1 /* Tiny Tide Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = CD13FCFA2FE89D850009F887 /* Tiny Tide Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		CD13FCFB2FE89D850009F887 /* Tiny Tide Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = CD13FCFA2FE89D850009F887 /* Tiny Tide Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E6F2670874E88F0D1927FF49 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 642C87950D7CAF7559D80FBE /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
@@ -18,14 +18,14 @@
 			containerPortal = CD13FCEE2FE89D850009F887 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = CD13FCF92FE89D850009F887;
-			remoteInfo = "Wristfish Watch App";
+			remoteInfo = "Tiny Tide Watch App";
 		};
 		CD13FCFC2FE89D850009F887 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = CD13FCEE2FE89D850009F887 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = CD13FCF92FE89D850009F887;
-			remoteInfo = "Wristfish Watch App";
+			remoteInfo = "Tiny Tide Watch App";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -36,7 +36,7 @@
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
-				AAAA000000000000000000E1 /* Wristfish Watch App.app in Embed Watch Content */,
+				AAAA000000000000000000E1 /* Tiny Tide Watch App.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -47,7 +47,7 @@
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
-				CD13FCFB2FE89D850009F887 /* Wristfish Watch App.app in Embed Watch Content */,
+				CD13FCFB2FE89D850009F887 /* Tiny Tide Watch App.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -55,16 +55,16 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		39E3AF915E7798F11C3F9BB7 /* Wristfish iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Wristfish iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		39E3AF915E7798F11C3F9BB7 /* Tiny Tide iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Tiny Tide iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		642C87950D7CAF7559D80FBE /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		CD13FCF42FE89D850009F887 /* Wristfish.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Wristfish.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		CD13FCFA2FE89D850009F887 /* Wristfish Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Wristfish Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CD13FCF42FE89D850009F887 /* Tiny Tide.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Tiny Tide.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CD13FCFA2FE89D850009F887 /* Tiny Tide Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Tiny Tide Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		CD13FCFE2FE89D850009F887 /* Wristfish Watch App */ = {
+		CD13FCFE2FE89D850009F887 /* Tiny Tide Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "Wristfish Watch App";
+			path = "Tiny Tide Watch App";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -107,7 +107,7 @@
 		CD13FCED2FE89D850009F887 = {
 			isa = PBXGroup;
 			children = (
-				CD13FCFE2FE89D850009F887 /* Wristfish Watch App */,
+				CD13FCFE2FE89D850009F887 /* Tiny Tide Watch App */,
 				CD13FCF52FE89D850009F887 /* Products */,
 				689B10C7BD52B03A969BDC8F /* Frameworks */,
 			);
@@ -116,9 +116,9 @@
 		CD13FCF52FE89D850009F887 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				CD13FCF42FE89D850009F887 /* Wristfish.app */,
-				CD13FCFA2FE89D850009F887 /* Wristfish Watch App.app */,
-				39E3AF915E7798F11C3F9BB7 /* Wristfish iOS.app */,
+				CD13FCF42FE89D850009F887 /* Tiny Tide.app */,
+				CD13FCFA2FE89D850009F887 /* Tiny Tide Watch App.app */,
+				39E3AF915E7798F11C3F9BB7 /* Tiny Tide iOS.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -126,9 +126,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		BFF824604AC08B5FE00AA435 /* Wristfish iOS */ = {
+		BFF824604AC08B5FE00AA435 /* Tiny Tide iOS */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 6B9315AE3B4003EA528125AB /* Build configuration list for PBXNativeTarget "Wristfish iOS" */;
+			buildConfigurationList = 6B9315AE3B4003EA528125AB /* Build configuration list for PBXNativeTarget "Tiny Tide iOS" */;
 			buildPhases = (
 				A8F1990654929CED91D7A690 /* Sources */,
 				98960A082E5BD2B07F337C66 /* Frameworks */,
@@ -141,16 +141,16 @@
 				AAAA000000000000000000E4 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				CD13FCFE2FE89D850009F887 /* Wristfish Watch App */,
+				CD13FCFE2FE89D850009F887 /* Tiny Tide Watch App */,
 			);
-			name = "Wristfish iOS";
-			productName = "Wristfish iOS";
-			productReference = 39E3AF915E7798F11C3F9BB7 /* Wristfish iOS.app */;
+			name = "Tiny Tide iOS";
+			productName = "Tiny Tide iOS";
+			productReference = 39E3AF915E7798F11C3F9BB7 /* Tiny Tide iOS.app */;
 			productType = "com.apple.product-type.application";
 		};
-		CD13FCF32FE89D850009F887 /* Wristfish */ = {
+		CD13FCF32FE89D850009F887 /* Tiny Tide */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = CD13FD0B2FE89D860009F887 /* Build configuration list for PBXNativeTarget "Wristfish" */;
+			buildConfigurationList = CD13FD0B2FE89D860009F887 /* Build configuration list for PBXNativeTarget "Tiny Tide" */;
 			buildPhases = (
 				CD13FCF22FE89D850009F887 /* Resources */,
 				CD13FD0A2FE89D860009F887 /* Embed Watch Content */,
@@ -160,14 +160,14 @@
 			dependencies = (
 				CD13FCFD2FE89D850009F887 /* PBXTargetDependency */,
 			);
-			name = Wristfish;
-			productName = Wristfish;
-			productReference = CD13FCF42FE89D850009F887 /* Wristfish.app */;
+			name = "Tiny Tide";
+			productName = "Tiny Tide";
+			productReference = CD13FCF42FE89D850009F887 /* Tiny Tide.app */;
 			productType = "com.apple.product-type.application.watchapp2-container";
 		};
-		CD13FCF92FE89D850009F887 /* Wristfish Watch App */ = {
+		CD13FCF92FE89D850009F887 /* Tiny Tide Watch App */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = CD13FD072FE89D860009F887 /* Build configuration list for PBXNativeTarget "Wristfish Watch App" */;
+			buildConfigurationList = CD13FD072FE89D860009F887 /* Build configuration list for PBXNativeTarget "Tiny Tide Watch App" */;
 			buildPhases = (
 				CD13FCF62FE89D850009F887 /* Sources */,
 				CD13FCF72FE89D850009F887 /* Frameworks */,
@@ -178,11 +178,11 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				CD13FCFE2FE89D850009F887 /* Wristfish Watch App */,
+				CD13FCFE2FE89D850009F887 /* Tiny Tide Watch App */,
 			);
-			name = "Wristfish Watch App";
-			productName = "Wristfish Watch App";
-			productReference = CD13FCFA2FE89D850009F887 /* Wristfish Watch App.app */;
+			name = "Tiny Tide Watch App";
+			productName = "Tiny Tide Watch App";
+			productReference = CD13FCFA2FE89D850009F887 /* Tiny Tide Watch App.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -203,7 +203,7 @@
 					};
 				};
 			};
-			buildConfigurationList = CD13FCF12FE89D850009F887 /* Build configuration list for PBXProject "Wristfish" */;
+			buildConfigurationList = CD13FCF12FE89D850009F887 /* Build configuration list for PBXProject "Tiny Tide" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -217,9 +217,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				CD13FCF32FE89D850009F887 /* Wristfish */,
-				CD13FCF92FE89D850009F887 /* Wristfish Watch App */,
-				BFF824604AC08B5FE00AA435 /* Wristfish iOS */,
+				CD13FCF32FE89D850009F887 /* Tiny Tide */,
+				CD13FCF92FE89D850009F887 /* Tiny Tide Watch App */,
+				BFF824604AC08B5FE00AA435 /* Tiny Tide iOS */,
 			);
 		};
 /* End PBXProject section */
@@ -268,12 +268,12 @@
 /* Begin PBXTargetDependency section */
 		AAAA000000000000000000E4 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = CD13FCF92FE89D850009F887 /* Wristfish Watch App */;
+			target = CD13FCF92FE89D850009F887 /* Tiny Tide Watch App */;
 			targetProxy = AAAA000000000000000000E2 /* PBXContainerItemProxy */;
 		};
 		CD13FCFD2FE89D850009F887 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = CD13FCF92FE89D850009F887 /* Wristfish Watch App */;
+			target = CD13FCF92FE89D850009F887 /* Tiny Tide Watch App */;
 			targetProxy = CD13FCFC2FE89D850009F887 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -287,7 +287,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = RJG3N9HJ6F;
 				ENABLE_PREVIEWS = YES;
@@ -297,7 +297,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				"INFOPLIST_KEY_UISupportedInterfaceOrientations~ipad" = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -329,7 +329,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = RJG3N9HJ6F;
 				ENABLE_PREVIEWS = YES;
@@ -339,7 +339,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				"INFOPLIST_KEY_UISupportedInterfaceOrientations~ipad" = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -483,9 +483,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "Wristfish Watch App/Wristfish Watch App.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "Tiny Tide Watch App/Tiny Tide Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = RJG3N9HJ6F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -521,9 +521,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "Wristfish Watch App/Wristfish Watch App.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "Tiny Tide Watch App/Tiny Tide Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = RJG3N9HJ6F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -559,11 +559,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = RJG3N9HJ6F;
 				INFOPLIST_KEY_CFBundleDisplayName = "Tiny Tide";
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dropdev.Wristfish;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dropdev.tinytidecontainer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -576,11 +576,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = RJG3N9HJ6F;
 				INFOPLIST_KEY_CFBundleDisplayName = "Tiny Tide";
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dropdev.Wristfish;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dropdev.tinytidecontainer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -593,7 +593,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		6B9315AE3B4003EA528125AB /* Build configuration list for PBXNativeTarget "Wristfish iOS" */ = {
+		6B9315AE3B4003EA528125AB /* Build configuration list for PBXNativeTarget "Tiny Tide iOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C94148CFC0C1715CA6DB97C4 /* Release */,
@@ -602,7 +602,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		CD13FCF12FE89D850009F887 /* Build configuration list for PBXProject "Wristfish" */ = {
+		CD13FCF12FE89D850009F887 /* Build configuration list for PBXProject "Tiny Tide" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				CD13FD052FE89D860009F887 /* Debug */,
@@ -611,7 +611,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		CD13FD072FE89D860009F887 /* Build configuration list for PBXNativeTarget "Wristfish Watch App" */ = {
+		CD13FD072FE89D860009F887 /* Build configuration list for PBXNativeTarget "Tiny Tide Watch App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				CD13FD082FE89D860009F887 /* Debug */,
@@ -620,7 +620,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		CD13FD0B2FE89D860009F887 /* Build configuration list for PBXNativeTarget "Wristfish" */ = {
+		CD13FD0B2FE89D860009F887 /* Build configuration list for PBXNativeTarget "Tiny Tide" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				CD13FD0C2FE89D860009F887 /* Debug */,

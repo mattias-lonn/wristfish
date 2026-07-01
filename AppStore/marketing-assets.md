@@ -3,7 +3,7 @@
 How we produce (1) cut-out element art and (2) paired App Store screenshots. Read this before
 regenerating anything so the look stays consistent. Game UI strings stay English, so all store
 copy is English too. **Every temp harness below is added, used, then reverted** — finish with
-`grep -rn 'TEMP-' "Wristfish Watch App/"` = 0 and both targets building green.
+`grep -rn 'TEMP-' "Tiny Tide Watch App/"` = 0 and both targets building green.
 
 > **Output lives in the project and is always overwritten.** Cut-out assets go to **`AppStore/assets/`**
 > and screenshots to **`AppStore/screenshots/`** (committed with the repo). Regenerating an image
@@ -50,14 +50,14 @@ colour via `ImageMath.unsafe_eval("convert(min((cb*255)/(a+1),255),'L')", …)`.
 Pipeline per element:
 - Crop the status bar / home indicator first: top `210px`, bottom `110px` (elements are centred).
 - Extract alpha + colour, then crop to the alpha bbox **thresholded at >12** (so faint glow halos
-  don't bloat the crop) + `16px` pad → save **`wristfish_<name>_cropped.png`** only. (We keep only the
+  don't bloat the crop) + `16px` pad → save **`tinytide_<name>_cropped.png`** only. (We keep only the
   cropped cut-outs — no full-frame versions.)
 - Keep each element's `big(k)` scale small enough that nothing (incl. soft shadows / light beams)
   touches the frame edge; the extractor logs `<-- CLIPS` if the bbox hits an edge. Current safe
   scales: boat `4.6`, pickaxe `(0.50w)/native`, lighthouse `2.2`, cast meter `1.2`.
 
 ### Asset harness (TEMP) — `WF_POSTER` + `WF_BG`
-- `WristfishApp.swift` `body`: if `WF_POSTER` is set, show a `Canvas` that fills the background from
+- `TinyTideApp.swift` `body`: if `WF_POSTER` is set, show a `Canvas` that fills the background from
   `WF_BG` (`black` / `white` / `sea`) then calls `GameArt.renderPoster(ctx, size, key)`.
 - `GameArt.swift`: append `static func renderPoster(_:_:_:)` (+ `posterKraken` / `posterBootBeast`
   creature-only copies). It draws ONE element, no background, at native size inside a `big(k){…}`
@@ -80,7 +80,7 @@ done
 
 ## 3. Element asset inventory (in `AppStore/assets/`)
 
-Each is `wristfish_<name>_cropped.png` (transparent, tight) — overwritten in place on every regen.
+Each is `tinytide_<name>_cropped.png` (transparent, tight) — overwritten in place on every regen.
 
 - **Fish:** `fish_herring` `fish_mackerel` `fish_cod` `fish_salmon` `fish_tuna`
 - **Items:** `item_chest` `item_pickaxe` `item_bomb` (sea mine) `item_boot`
@@ -91,7 +91,7 @@ Each is `wristfish_<name>_cropped.png` (transparent, tight) — overwritten in p
 - **Other:** `gull` `vak` `boat_clean`
 - **Speeding boat:** `boat_speeding` (transparent, real game wake via two-bg)
 
-All are `wristfish_<name>_cropped.png` (transparent, tight). No full-frame versions are kept.
+All are `tinytide_<name>_cropped.png` (transparent, tight). No full-frame versions are kept.
 
 > Translucent effects (wake, foam, beams, vak rings) only survive via the two-background pass. The
 > render of the same element over black and white must be pixel-identical except the background
@@ -99,11 +99,11 @@ All are `wristfish_<name>_cropped.png` (transparent, tight). No full-frame versi
 
 ---
 
-## 4. App Store screenshots — paired watch + iPhone
+## 4. App Store screenshots — watch + iPhone + iPad
 
-Saved to `AppStore/screenshots/` as `wristfish_<scene>_iphone.png` and `wristfish_<scene>_watch.png`
-(overwritten in place). **Score must match within a pair** (same `WF_SCORE`); different scenes may
-use different scores.
+Saved to `AppStore/screenshots/` as `tinytide_<scene>_iphone.png`, `tinytide_<scene>_watch.png` and
+`tinytide_<scene>_ipad.png` (overwritten in place). **Score must match within a pair** (same
+`WF_SCORE`); different scenes may use different scores.
 
 ### Screenshot harness (TEMP) — `WF_SCENE` + `WF_SCORE`
 - `GameModel.swift`: `static let debugScene = env["WF_SCENE"]`; a `debugFrozen` flag; `applyDebugScene()`
@@ -140,15 +140,26 @@ Scene specifics that make each shot tell its story:
   so `timeOfDay = elapsed/dayLength = 0.56`, the peak of `GameArt.sunsetAmount`). `fixedTimeOfDay` is a
   `let`, so drive the time via `elapsed`, not by mutating the config.
 
-### Capture loop (both sims)
+### Capture loop (all three sims)
 ```bash
-# iPhone sim + Apple Watch Ultra sim, same WF_SCORE per scene
+# iPhone sim + Apple Watch Ultra sim + iPad Pro 13" sim, same WF_SCORE per scene
 SIMCTL_CHILD_WF_SCENE=$scene SIMCTL_CHILD_WF_SCORE=$score xcrun simctl launch $SIM $BUNDLE
 python3 -c "import time; time.sleep(2.6)"   # 0.4s auto-start + game start + render
-xcrun simctl io $SIM screenshot AppStore/screenshots/wristfish_${scene}_<device>.png
+xcrun simctl io $SIM screenshot AppStore/screenshots/tinytide_${scene}_<device>.png
 ```
-Bundle ids: iOS `com.dropdev.WristfishiOS`, watch `com.dropdev.Wristfish.watchkitapp`.
+Bundle ids: iOS `com.dropdev.tinytide`, watch `com.dropdev.tinytide.watchkitapp`.
 The on-screen score HUD is shown in every gameplay view on both devices.
+
+**iPad screenshots** (App Store requires iPad Pro sizes): use the **iPad Pro 13-inch (M5)** sim
+(`com.dropdev.tinytide` installs on it). The shipped iPad shots are **landscape, 2752 × 2064**
+(`tinytide_<scene>_ipad.png`). **Gotcha:** `simctl io … screenshot` ALWAYS writes the device's native
+**portrait** frame (2064 × 2752); when the sim UI is landscape the content comes out **rotated 90°**.
+So: rotate the sim to **landscape** (Simulator → ⌘→, frontmost window), capture each scene, then rotate
+each PNG **−90° (clockwise)** in PIL to get upright **2752 × 2064**:
+```python
+Image.open(raw).convert("RGB").rotate(-90, expand=True).save(out)  # 2064x2752 → 2752x2064
+```
+(For portrait 2064 × 2752 shots instead, put the sim in portrait and skip the PIL rotate.)
 
 ---
 
@@ -168,7 +179,7 @@ The on-screen score HUD is shown in every gameplay view on both devices.
 2. **Screenshots:** add the screenshot harness (§4), build BOTH targets, install on the iPhone and the
    Apple Watch Ultra sims, capture each scene on both with the same `WF_SCORE`. Verify the score
    matches per pair and is visible on both devices.
-3. **Revert** every temp harness — `grep -rn 'TEMP-' "Wristfish Watch App/"` = 0, both targets green.
+3. **Revert** every temp harness — `grep -rn 'TEMP-' "Tiny Tide Watch App/"` = 0, both targets green.
 ## 7. Marketing PREVIEW VIDEO (device-frame poster, live screens)
 
 The poster `AppStore/video/poster_template.png` (1284×2778, exported from the design tool with **green**
@@ -209,7 +220,7 @@ clean, both targets green). Green is removed with a **despilled poster** (`masks
 — every green pixel → dark navy) plus exact per-screen stencil masks, so there's **no green rim and the
 foreground gull / device bezels are never clipped** (no heavy dilation). Output (overwritten in place):
 `tinytide_app_preview.mp4` + `tinytide_preview_hero.png`. To tweak the run, edit `wf_demo.patch`'s values
-(or re-apply it, edit the Swift, regenerate the patch) — keep `grep -rn 'TEMP-' "Wristfish Watch App/"` = 0.
+(or re-apply it, edit the Swift, regenerate the patch) — keep `grep -rn 'TEMP-' "Tiny Tide Watch App/"` = 0.
 
 ---
 

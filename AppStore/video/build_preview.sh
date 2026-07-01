@@ -30,9 +30,9 @@ trap cleanup EXIT
 # 0) Apply the WF_DEMO harness, build BOTH targets.
 cd "$REPO"
 git apply "$HERE/wf_demo.patch"
-xcodebuild -project Wristfish.xcodeproj -scheme "Wristfish Watch App" -configuration Debug \
+xcodebuild -project Tiny Tide.xcodeproj -scheme "Tiny Tide Watch App" -configuration Debug \
   -destination "platform=watchOS Simulator,id=$WATCH" -derivedDataPath build/ddpw build >/dev/null
-xcodebuild -project Wristfish.xcodeproj -scheme "Wristfish iOS" -configuration Debug \
+xcodebuild -project Tiny Tide.xcodeproj -scheme "Tiny Tide iOS" -configuration Debug \
   -destination "platform=iOS Simulator,id=$IOS" -derivedDataPath build/ddp build >/dev/null
 
 cd "$HERE"

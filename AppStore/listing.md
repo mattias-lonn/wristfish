@@ -9,8 +9,9 @@ copy is English too.
 
 ## 1. Name — current shortlist
 
-Replace the working title **Wristfish** (watch-locked, misrepresents the iPhone
-version). Top verified-free picks, easy to remember + roll off the tongue:
+The working codename was watch-locked and misrepresented the iPhone version, so the
+shipped name is **Tiny Tide** — chosen from these verified-free picks (easy to remember
++ roll off the tongue):
 
 | Pick | Why | Status |
 |------|-----|--------|
